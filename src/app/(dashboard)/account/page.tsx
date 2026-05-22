@@ -1,10 +1,30 @@
-export default function AccountPage() {
+import { redirect } from "next/navigation";
+
+import { Card, CardContent } from "@/components/ui/card";
+import { ROUTES } from "@/config/routes";
+import { ProfileForm } from "@/features/account/components/profile-form";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+export default async function ProfilePage() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect(ROUTES.login);
+
+  const displayName =
+    typeof user.user_metadata?.display_name === "string"
+      ? user.user_metadata.display_name
+      : "";
+
   return (
-    <div className="flex flex-col gap-2">
-      <h1 className="text-2xl font-semibold tracking-tight">Account</h1>
-      <p className="text-muted-foreground">
-        Profile, security, and billing tabs land here in Phase 3.
-      </p>
-    </div>
+    <Card>
+      <CardContent className="pt-6">
+        <ProfileForm
+          email={user.email ?? ""}
+          defaultValues={{ display_name: displayName }}
+        />
+      </CardContent>
+    </Card>
   );
 }

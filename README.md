@@ -2,7 +2,7 @@
 
 Frontend for **Standfast** — a trading journal that helps day traders maintain emotional control.
 
-Pairs with the FastAPI backend in `standfast-1/`. Communicates with Supabase directly for auth + realtime, and with the backend over HTTP for journal/trade data.
+Pairs with the FastAPI backend in the parent `standfast-1/` directory (collocated, two separate git repos). Communicates with Supabase directly for auth + realtime, and with the backend over HTTP for journal/trade data.
 
 ## Stack
 

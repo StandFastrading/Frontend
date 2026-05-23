@@ -8,7 +8,12 @@ export type NavItem = {
 
 export const dashboardNav: NavItem[] = [
   { label: "Dashboard", href: ROUTES.dashboard, icon: "LayoutDashboard" },
+  { label: "Trade Desk", href: "#", icon: "LineChart" },
+  { label: "Rules & Risk", href: "#", icon: "ShieldCheck" },
+  { label: "Behavior Analytics", href: "#", icon: "Brain" },
   { label: "Journal", href: ROUTES.journal, icon: "BookOpen" },
-  { label: "Trades", href: ROUTES.trades, icon: "TrendingUp" },
-  { label: "Account", href: ROUTES.account, icon: "User" },
+  { label: "Trade History", href: ROUTES.trades, icon: "History" },
+  { label: "Reports", href: "#", icon: "FileText" },
+  { label: "Calendar", href: "#", icon: "Calendar" },
+  { label: "Settings", href: ROUTES.account, icon: "Settings" },
 ];

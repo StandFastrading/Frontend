@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/config/env";
 import { ROUTES } from "@/config/routes";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/journal", "/trades", "/account"];
+const PROTECTED_PREFIXES = ["/journal", "/trades", "/account"];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });

@@ -2,9 +2,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowUp,
-  BookOpenCheck,
   Brain,
-  CircleDollarSign,
   Flame,
   Hammer,
   LineChart,
@@ -68,19 +66,6 @@ export const BUILT_FOR_TRADERS: string[] = [
   "Build consistent discipline",
   "Protect your edge",
   "Perform under pressure",
-];
-
-export type MarketTile = {
-  label: string;
-  icon: LucideIcon;
-};
-
-export const MARKETS: MarketTile[] = [
-  { label: "STOCKS", icon: LineChart },
-  { label: "OPTIONS", icon: Activity },
-  { label: "FOREX", icon: CircleDollarSign },
-  { label: "FUTURES", icon: BookOpenCheck },
-  { label: "CRYPTO", icon: Sparkles },
 ];
 
 export type ValueProp = {

@@ -10,11 +10,10 @@ import {
   BUILT_FOR_TRADERS,
   HERO_PILLS,
   HOW_IT_WORKS,
-  MARKETS,
   VALUE_PROPS,
 } from "@/features/marketing/data";
-import { HeroCandles } from "@/features/marketing/components/hero-candles";
-import { HeroMockup } from "@/features/marketing/components/hero-mockup";
+import { HeroFlow } from "@/features/marketing/components/hero-flow";
+import { PatternIntelligenceCard } from "@/features/marketing/components/pattern-intelligence-card";
 import { WaitlistTrigger } from "@/features/marketing/components/waitlist-trigger";
 import { cn } from "@/lib/utils";
 
@@ -35,11 +34,9 @@ export default function MarketingHomePage() {
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 right-0 w-[70%] opacity-90"
-        >
-          <HeroCandles />
-        </div>
-        <div className="relative mx-auto grid w-full max-w-7xl gap-12 px-6 py-20 lg:grid-cols-[1.05fr_1fr] lg:py-28">
+          className="pointer-events-none absolute inset-y-0 right-0 w-[60%] bg-[radial-gradient(circle_at_top_right,oklch(0.62_0.22_255/0.12),transparent_60%)]"
+        />
+        <div className="relative mx-auto grid w-full max-w-7xl items-center gap-12 px-6 py-20 lg:grid-cols-[1fr_1.65fr] lg:py-28">
           <div className="flex flex-col gap-7">
             <h1 className="text-balance text-4xl font-bold uppercase leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
               Interrupt <span className="text-brand">impulsive trading</span>{" "}
@@ -75,9 +72,7 @@ export default function MarketingHomePage() {
               ))}
             </ul>
           </div>
-          <div className="flex items-center justify-center lg:justify-end">
-            <HeroMockup />
-          </div>
+          <HeroFlow />
         </div>
       </section>
 
@@ -100,55 +95,57 @@ export default function MarketingHomePage() {
               It&rsquo;s behavior.
             </h2>
           </div>
-          <ul className="grid w-full grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-4 lg:grid-cols-7">
+          <ul className="grid w-full grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 lg:grid-cols-7">
             {BEHAVIORS.map(({ label, icon: Icon }) => (
-              <li
-                key={label}
-                className="flex flex-col items-center gap-3 text-center"
-              >
-                <span className="flex size-12 items-center justify-center rounded-full bg-rose-500/10 text-rose-400 ring-1 ring-rose-500/20">
-                  <Icon className="size-5" />
-                </span>
-                <span className="text-xs font-medium text-muted-foreground sm:text-sm">
-                  {label}
-                </span>
+              <li key={label} className="flex">
+                <div className="flex w-full flex-col items-center justify-center gap-3 rounded-xl border border-rose-500/40 bg-card/80 p-4 text-center backdrop-blur shadow-[0_0_28px_-12px_rgba(255,59,92,0.6)]">
+                  <Icon
+                    className="size-7 text-[#ff3b5c]"
+                    strokeWidth={2.25}
+                  />
+                  <span className="text-xs font-semibold leading-tight text-foreground sm:text-sm">
+                    {label}
+                  </span>
+                </div>
               </li>
             ))}
           </ul>
-          <p className="max-w-2xl text-center text-sm text-muted-foreground">
+          <p className="max-w-4xl text-balance text-center text-xl font-semibold uppercase leading-snug tracking-wide text-foreground/90 sm:text-2xl">
             These behaviors cost more than bad trades. They cost consistency,
             confidence, and compounding.
           </p>
         </div>
       </section>
 
-      {/* ── How It Works (LIGHT section) ─────────────────────────────── */}
+      {/* ── How It Works ─────────────────────────────────────────────── */}
       <section
         id="how-it-works"
-        className="light border-b border-border/60 bg-background py-20 text-foreground"
+        className="border-b border-border/60 py-20"
       >
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-14 px-6">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <h2 className="text-3xl font-bold uppercase tracking-tight sm:text-4xl">
-              How Standfast Works
-            </h2>
-            <span
-              aria-hidden
-              className="h-0.5 w-12 rounded-full bg-brand"
-            />
-          </div>
-          <ol className="grid grid-cols-1 items-start gap-10 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
-            {HOW_IT_WORKS.map((step, idx) => (
-              <Step
-                key={step.title}
-                index={idx + 1}
-                title={step.title}
-                body={step.body}
-                Icon={step.icon}
-                isLast={idx === HOW_IT_WORKS.length - 1}
+        <div className="mx-auto w-full max-w-7xl px-6">
+          <div className="flex flex-col gap-12 rounded-2xl border border-border/50 bg-card/30 px-6 py-12 backdrop-blur sm:px-10 sm:py-14">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <h2 className="text-3xl font-bold uppercase tracking-tight sm:text-4xl">
+                How Standfast Works
+              </h2>
+              <span
+                aria-hidden
+                className="h-0.5 w-12 rounded-full bg-brand"
               />
-            ))}
-          </ol>
+            </div>
+            <ol className="grid grid-cols-1 items-start gap-10 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
+              {HOW_IT_WORKS.map((step, idx) => (
+                <Step
+                  key={step.title}
+                  index={idx + 1}
+                  title={step.title}
+                  body={step.body}
+                  Icon={step.icon}
+                  isLast={idx === HOW_IT_WORKS.length - 1}
+                />
+              ))}
+            </ol>
+          </div>
         </div>
       </section>
 
@@ -185,38 +182,7 @@ export default function MarketingHomePage() {
               </ul>
             </div>
           </Card>
-          <Card className="border-border/60 bg-card/60 p-10">
-            <div className="flex flex-col gap-6">
-              <div className="text-center">
-                <p className="text-sm uppercase tracking-[0.25em] text-brand">
-                  What type of trader are you?
-                </p>
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Choose your market. We&rsquo;ll tailor Standfast to your
-                  world.
-                </p>
-              </div>
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                {MARKETS.map(({ label, icon: Icon }, idx) => (
-                  <li key={label}>
-                    <button
-                      type="button"
-                      className={cn(
-                        "group flex aspect-square w-full flex-col items-center justify-center gap-2 rounded-lg border border-border/60 bg-background/40 p-3 text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:border-brand/60 hover:text-foreground",
-                        idx === 0 && "border-brand/60 text-foreground",
-                      )}
-                    >
-                      <Icon className="size-5 text-brand" />
-                      <span>{label}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-center text-xs text-muted-foreground">
-                You can change this anytime in settings.
-              </p>
-            </div>
-          </Card>
+          <PatternIntelligenceCard />
         </div>
       </section>
 
@@ -307,7 +273,7 @@ function Step({ index, title, body, Icon, isLast }: StepProps) {
         <h3 className="text-sm font-bold uppercase tracking-wider">
           {index}. {title}
         </h3>
-        <p className="max-w-xs text-sm text-muted-foreground">{body}</p>
+        <p className="max-w-xs text-sm font-medium text-brand">{body}</p>
       </li>
       {!isLast && (
         <span

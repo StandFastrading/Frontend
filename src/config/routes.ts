@@ -9,6 +9,8 @@ export const ROUTES = {
   accountSecurity: "/account/security",
   accountBilling: "/account/billing",
   docs: "/docs",
+  privacy: "/privacy",
+  terms: "/terms",
 } as const;
 
 export type Route = (typeof ROUTES)[keyof typeof ROUTES];

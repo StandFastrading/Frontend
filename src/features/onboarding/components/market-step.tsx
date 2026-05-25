@@ -58,7 +58,17 @@ export function MarketStep() {
 
   function handleContinue() {
     console.log("[onboarding] market", { selected });
-    router.push("/onboarding/experience");
+    if (selected === "options") {
+      router.push("/onboarding/options/experience");
+    } else if (selected === "futures") {
+      router.push("/onboarding/futures/experience");
+    } else if (selected === "forex") {
+      router.push("/onboarding/forex/experience");
+    } else if (selected === "crypto") {
+      router.push("/onboarding/crypto/experience");
+    } else {
+      router.push("/onboarding/experience");
+    }
   }
 
   return (

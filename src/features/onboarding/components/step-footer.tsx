@@ -1,11 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ArrowLeft, ArrowRight, Lock } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { STEPS, getStepByNum } from "@/features/onboarding/steps";
+import { STEPS } from "@/features/onboarding/steps";
+import { OPTIONS_STEPS } from "@/features/onboarding/options-steps";
+import { FUTURES_STEPS } from "@/features/onboarding/futures-steps";
+import { FOREX_STEPS } from "@/features/onboarding/forex-steps";
+import { CRYPTO_STEPS } from "@/features/onboarding/crypto-steps";
 
 export function StepFooter({
   currentNum,
@@ -18,8 +23,22 @@ export function StepFooter({
   continueDisabled?: boolean;
   continueLabel?: string;
 }) {
-  const prev = getStepByNum(currentNum - 1);
-  const total = STEPS.length;
+  const pathname = usePathname();
+  const isOptionsFlow = pathname.startsWith("/onboarding/options/");
+  const isFuturesFlow = pathname.startsWith("/onboarding/futures/");
+  const isForexFlow = pathname.startsWith("/onboarding/forex/");
+  const isCryptoFlow = pathname.startsWith("/onboarding/crypto/");
+  const activeSteps = isOptionsFlow
+    ? OPTIONS_STEPS
+    : isFuturesFlow
+      ? FUTURES_STEPS
+      : isForexFlow
+        ? FOREX_STEPS
+        : isCryptoFlow
+          ? CRYPTO_STEPS
+          : STEPS;
+  const prev = activeSteps.find((s) => s.num === currentNum - 1);
+  const total = activeSteps.length;
   const completed = currentNum - 1;
   const progress = (completed / total) * 100;
 

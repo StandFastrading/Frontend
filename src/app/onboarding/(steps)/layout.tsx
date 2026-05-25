@@ -8,7 +8,11 @@ import { CheckCircle2, HelpCircle, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/config/routes";
 import { cn } from "@/lib/utils";
-import { STEPS, getStepBySlug } from "@/features/onboarding/steps";
+import { STEPS } from "@/features/onboarding/steps";
+import { OPTIONS_STEPS } from "@/features/onboarding/options-steps";
+import { FUTURES_STEPS } from "@/features/onboarding/futures-steps";
+import { FOREX_STEPS } from "@/features/onboarding/forex-steps";
+import { CRYPTO_STEPS } from "@/features/onboarding/crypto-steps";
 
 export default function StepsLayout({
   children,
@@ -16,8 +20,23 @@ export default function StepsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const slug = pathname.split("/").pop() ?? "";
-  const current = getStepBySlug(slug);
+  const slug = pathname.replace(/^\/onboarding\//, "");
+  const isOptionsFlow = slug.startsWith("options/");
+  const isFuturesFlow = slug.startsWith("futures/");
+  const isForexFlow = slug.startsWith("forex/");
+  const isCryptoFlow = slug.startsWith("crypto/");
+  const activeSteps = isOptionsFlow
+    ? OPTIONS_STEPS
+    : isFuturesFlow
+      ? FUTURES_STEPS
+      : isForexFlow
+        ? FOREX_STEPS
+        : isCryptoFlow
+          ? CRYPTO_STEPS
+          : STEPS;
+  const current =
+    activeSteps.find((s) => s.slug === slug) ??
+    activeSteps.find((s) => s.slug === slug.split("/").pop());
   const currentNum = current?.num ?? 1;
 
   return (
@@ -38,7 +57,7 @@ export default function StepsLayout({
             Onboarding
           </p>
           <ol className="flex flex-col gap-1">
-            {STEPS.map((step) => {
+            {activeSteps.map((step) => {
               const isCurrent = step.slug === slug;
               const isDone = step.num < currentNum;
               return (

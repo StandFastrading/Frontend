@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Image from "next/image";
 import { Lock } from "lucide-react";
 
@@ -25,7 +26,9 @@ export default function LoginPage() {
         </div>
 
         <div className="mt-7">
-          <LoginForm />
+          <Suspense fallback={null}>
+            <LoginForm />
+          </Suspense>
         </div>
       </div>
 

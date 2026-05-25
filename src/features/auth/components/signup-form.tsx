@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 
 import { signupSchema, type SignupInput } from "../schemas";
 import { signUpWithPassword } from "../api";
+import { setMockSession } from "../mock-session";
 
 const fieldClass =
   "h-11 border-cyan-500/20 bg-[#0a1020] text-base text-white placeholder:text-slate-600 focus-visible:border-cyan-400 focus-visible:ring-cyan-400/30";
@@ -100,8 +101,10 @@ export function SignupForm() {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        console.log("[signup passthrough]", form.getValues());
-        router.push("/onboarding");
+        // Mock-mode signup: set session cookie and go straight to onboarding.
+        setMockSession();
+        router.push(ROUTES.onboarding);
+        router.refresh();
       }}
       className="flex flex-col gap-5"
       noValidate

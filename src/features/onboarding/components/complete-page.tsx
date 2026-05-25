@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   BarChart3,
@@ -18,6 +18,10 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/config/routes";
+import {
+  setMockOnboarded,
+  setMockSession,
+} from "@/features/auth/mock-session";
 import { cn } from "@/lib/utils";
 
 type EngineNode = {
@@ -107,6 +111,18 @@ const READY_ITEMS = [
 ];
 
 export function CompletePage() {
+  const router = useRouter();
+
+  const handleEnterDashboard = () => {
+    // Set both flags before navigating — handles the case where a user
+    // reaches /onboarding without an active session (otherwise middleware
+    // sees no session cookie on /dashboard and redirects to /login).
+    setMockSession();
+    setMockOnboarded();
+    router.push(ROUTES.dashboard);
+    router.refresh();
+  };
+
   return (
     <div className="flex flex-1 items-center justify-center px-6 py-10">
       <div className="grid w-full max-w-6xl grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-12">
@@ -175,21 +191,20 @@ export function CompletePage() {
                 </p>
               </div>
             </div>
-            <Link href={ROUTES.dashboard}>
-              <Button
-                size="lg"
-                className={cn(
-                  "h-14 w-full gap-2 text-base font-semibold tracking-wide text-lime-950",
-                  "bg-gradient-to-r from-lime-400 to-lime-500",
-                  "shadow-[0_0_40px_-5px_rgba(132,204,22,0.55)]",
-                  "transition-all duration-200 ease-out",
-                  "hover:-translate-y-0.5 hover:from-lime-300 hover:to-lime-400 hover:shadow-[0_0_55px_-5px_rgba(132,204,22,0.7)]",
-                )}
-              >
-                Enter Dashboard
-                <ArrowRight className="size-5" />
-              </Button>
-            </Link>
+            <Button
+              size="lg"
+              onClick={handleEnterDashboard}
+              className={cn(
+                "h-14 w-full gap-2 text-base font-semibold tracking-wide text-lime-950",
+                "bg-gradient-to-r from-lime-400 to-lime-500",
+                "shadow-[0_0_40px_-5px_rgba(132,204,22,0.55)]",
+                "transition-all duration-200 ease-out",
+                "hover:-translate-y-0.5 hover:from-lime-300 hover:to-lime-400 hover:shadow-[0_0_55px_-5px_rgba(132,204,22,0.7)]",
+              )}
+            >
+              Enter Dashboard
+              <ArrowRight className="size-5" />
+            </Button>
           </div>
 
           <p className="flex items-center justify-center gap-2 text-xs text-slate-500">
@@ -387,9 +402,10 @@ function DisciplineEngineDiagram() {
               style={{
                 borderColor: `${node.color}55`,
                 boxShadow: `0 0 12px -3px ${node.glow}`,
+                color: node.color,
               }}
             >
-              <Icon className="size-4" style={{ color: node.color }} />
+              <Icon className="size-4" />
             </div>
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white">
               {node.title}

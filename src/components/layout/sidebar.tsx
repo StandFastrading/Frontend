@@ -99,13 +99,13 @@ export function Sidebar({ email }: { email: string }) {
           Move to the live trading environment to execute, scan, and monitor
           markets.
         </p>
-        <button
-          type="button"
+        <Link
+          href={ROUTES.desk}
           className="flex items-center justify-center gap-2 rounded-md bg-brand px-3 py-2 text-xs font-semibold text-brand-foreground transition-colors hover:bg-brand/90"
         >
           Enter Trade Desk
           <ArrowRight className="size-3.5" />
-        </button>
+        </Link>
       </div>
 
       {/* User profile */}

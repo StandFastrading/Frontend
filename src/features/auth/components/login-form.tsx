@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 
 import { loginSchema, type LoginInput } from "../schemas";
 import { signInWithPassword } from "../api";
+import { setMockSession } from "../mock-session";
 
 export function LoginForm() {
   const router = useRouter();
@@ -44,8 +45,12 @@ export function LoginForm() {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        console.log("[login passthrough]", form.getValues());
-        router.push("/onboarding");
+        // Mock-mode login: set session cookie so middleware grants access,
+        // then send the user to `next` (or dashboard). Middleware will route
+        // to /onboarding if they haven't completed it yet.
+        setMockSession();
+        router.push(next);
+        router.refresh();
       }}
       className="flex flex-col gap-5"
       noValidate

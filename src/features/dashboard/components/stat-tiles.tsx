@@ -97,10 +97,10 @@ export function StatTiles() {
       <Tile label="Discipline Score">
         <div className="relative flex flex-col items-center">
           <DisciplineGauge score={DISCIPLINE.score} max={DISCIPLINE.max} />
-          <div className="absolute inset-0 flex flex-col items-center justify-center pt-2">
-            <span className="text-4xl font-semibold leading-none text-foreground">
+          <div className="absolute inset-0 flex flex-col items-center justify-center pt-5">
+            <span className="text-3xl font-semibold leading-none text-foreground">
               {DISCIPLINE.score}
-              <span className="text-base text-muted-foreground"> /{DISCIPLINE.max}</span>
+              <span className="text-sm text-muted-foreground"> /{DISCIPLINE.max}</span>
             </span>
           </div>
         </div>

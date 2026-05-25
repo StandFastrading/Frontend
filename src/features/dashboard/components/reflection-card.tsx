@@ -1,4 +1,7 @@
+import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+
+import { ROUTES } from "@/config/routes";
 
 export function ReflectionCard() {
   return (
@@ -17,20 +20,20 @@ export function ReflectionCard() {
         </p>
       </div>
 
-      <button
-        type="button"
-        className="rounded-md bg-brand py-2.5 text-sm font-semibold text-brand-foreground transition-colors hover:bg-brand/90"
+      <Link
+        href={ROUTES.journal}
+        className="block rounded-md bg-brand py-2.5 text-center text-sm font-semibold text-brand-foreground transition-colors hover:bg-brand/90"
       >
         Start Reflection
-      </button>
+      </Link>
 
-      <button
-        type="button"
+      <Link
+        href={ROUTES.journal}
         className="flex items-center justify-center gap-1.5 text-xs font-semibold text-brand transition-colors hover:text-brand/80"
       >
         View Journal
         <ArrowRight className="size-3.5" />
-      </button>
+      </Link>
     </div>
   );
 }

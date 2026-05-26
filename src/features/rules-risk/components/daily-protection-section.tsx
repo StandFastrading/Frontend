@@ -27,6 +27,14 @@ export function DailyProtectionSection({
           />
         </Field>
 
+        <Field label="Max Daily Trades">
+          <NumericInput
+            value={value.maxDailyTrades}
+            onChange={(n) => onChange({ maxDailyTrades: n })}
+            placeholder="5"
+          />
+        </Field>
+
         <Field label="Max Red Trades">
           <NumericInput
             value={value.maxRedTrades}

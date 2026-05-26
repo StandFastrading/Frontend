@@ -40,7 +40,7 @@ export function BehaviorRulesSection({
           checked={value.noOvertrading}
           onChange={(v) => onChange({ noOvertrading: v })}
           label="No Overtrading"
-          description="Trigger warnings when the daily max-trades count is reached."
+          description="Trigger warnings when max daily trades is reached."
         />
       </div>
 

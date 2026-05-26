@@ -42,7 +42,7 @@ const EXPIRATION_RULES: ExpirationRule[] = [
   {
     id: "no-revenge",
     label: "No same-day revenge trades",
-    description: "Block re-entries within the cool-off window.",
+    description: "Trigger warnings on re-entries within the cool-off window.",
     icon: Swords,
   },
   {

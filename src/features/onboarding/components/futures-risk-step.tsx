@@ -37,7 +37,7 @@ const SPECIAL_RULES: Rule[] = [
   {
     id: "no-revenge-after-reds",
     label: "No revenge trades after red trades",
-    description: "Block re-entries in the cool-off window.",
+    description: "Trigger warnings on re-entries in the cool-off window.",
     icon: Swords,
   },
   {

@@ -1,6 +1,7 @@
-// Canonical shape for trader risk configuration. Trade Desk should eventually
-// read account size + rule data from here. Persisted to localStorage today;
-// designed to round-trip cleanly to a backend record later.
+// UI-level sub-shapes consumed by the Rules & Risk section components. The
+// canonical record is `RiskRules` in @/types — the workspace
+// projects that flat shape into these nested views and merges patches back
+// on save, so section component props stay stable across storage changes.
 
 export type AccountType = "Cash" | "Margin" | "Futures" | "Crypto";
 export type AccountCurrency = "USD" | "EUR" | "GBP" | "CAD";
@@ -26,6 +27,7 @@ export type PerTradeRules = {
 
 export type DailyProtectionRules = {
   maxDailyLossPercent: number;
+  maxDailyTrades: number;
   maxRedTrades: number;
   maxConsecutiveLosses: number;
   cooldownAfterLossMinutes: number;
@@ -44,14 +46,4 @@ export type InterventionPreferences = {
   warningLevel: WarningLevel;
   requireConfirmationBeforeOverride: boolean;
   reflectionPromptAfterOverride: boolean;
-};
-
-export type RiskRulesConfig = {
-  account: AccountSettings;
-  perTrade: PerTradeRules;
-  allowedSetups: string[];
-  daily: DailyProtectionRules;
-  behavior: BehaviorRules;
-  intervention: InterventionPreferences;
-  lastUpdated: string | null;
 };

@@ -36,7 +36,7 @@ export function RuleCheckModal({
 
   if (!primary) return null;
 
-  const title = hasFail ? "Trade blocks rule check" : "Trade triggers a warning";
+  const title = hasFail ? "Trade requires review" : "Trade triggers a warning";
   const summary = hasFail
     ? `${failures.length} rule${failures.length === 1 ? "" : "s"} failed${warnings.length ? `, ${warnings.length} warning${warnings.length === 1 ? "" : "s"}` : ""}.`
     : `${warnings.length} warning${warnings.length === 1 ? "" : "s"}.`;

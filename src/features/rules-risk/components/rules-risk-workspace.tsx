@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AccountRiskSection } from "@/features/rules-risk/components/account-risk-section";
@@ -14,60 +14,179 @@ import {
   PreSessionCard,
   RulesRiskHeader,
 } from "@/features/rules-risk/components/rules-risk-header";
-import {
-  DEFAULT_RISK_RULES,
-  loadRiskRules,
-  saveRiskRules,
-} from "@/features/rules-risk/storage";
-import type { RiskRulesConfig } from "@/features/rules-risk/types";
+import type {
+  AccountSettings,
+  BehaviorRules,
+  DailyProtectionRules,
+  InterventionPreferences,
+  PerTradeRules,
+} from "@/features/rules-risk/types";
+import type { RiskRules } from "@/types";
+import { getDefaultRiskRules } from "@/types";
+import { useAppStore } from "@/store";
+
+// Section components still consume the legacy nested sub-shapes. The canonical
+// state is the flat `RiskRules` record from @/types — we
+// project nested views to the UI and merge patches back into the flat record
+// on the way out. Lets us swap the storage layer once without touching any
+// section component.
+
+function toAccount(r: RiskRules): AccountSettings {
+  return {
+    accountSize: r.accountSize,
+    baseRiskPerTradePercent: r.baseRiskPerTradePercent,
+    maxDollarRiskPerTrade: r.maxDollarRiskPerTrade,
+    accountType: r.accountType,
+    currency: r.accountCurrency,
+  };
+}
+function fromAccount(patch: Partial<AccountSettings>): Partial<RiskRules> {
+  const out: Partial<RiskRules> = {};
+  if (patch.accountSize !== undefined) out.accountSize = patch.accountSize;
+  if (patch.baseRiskPerTradePercent !== undefined)
+    out.baseRiskPerTradePercent = patch.baseRiskPerTradePercent;
+  if (patch.maxDollarRiskPerTrade !== undefined)
+    out.maxDollarRiskPerTrade = patch.maxDollarRiskPerTrade;
+  if (patch.accountType !== undefined) out.accountType = patch.accountType;
+  if (patch.currency !== undefined) out.accountCurrency = patch.currency;
+  return out;
+}
+
+function toPerTrade(r: RiskRules): PerTradeRules {
+  return {
+    requireStopLoss: r.requireStopLoss,
+    minRewardRiskRatio: r.minimumRewardRisk,
+    maxPositionSize: r.maxPositionSize,
+    maxAddsPerTrade: r.maxAddsPerTrade,
+    noAveragingDown: r.noAveragingDown,
+    maxOpenPositions: r.maxOpenPositions,
+    setupMustBeApproved: r.setupMustBeApproved,
+  };
+}
+function fromPerTrade(patch: Partial<PerTradeRules>): Partial<RiskRules> {
+  const out: Partial<RiskRules> = {};
+  if (patch.requireStopLoss !== undefined)
+    out.requireStopLoss = patch.requireStopLoss;
+  if (patch.minRewardRiskRatio !== undefined)
+    out.minimumRewardRisk = patch.minRewardRiskRatio;
+  if (patch.maxPositionSize !== undefined)
+    out.maxPositionSize = patch.maxPositionSize;
+  if (patch.maxAddsPerTrade !== undefined)
+    out.maxAddsPerTrade = patch.maxAddsPerTrade;
+  if (patch.noAveragingDown !== undefined)
+    out.noAveragingDown = patch.noAveragingDown;
+  if (patch.maxOpenPositions !== undefined)
+    out.maxOpenPositions = patch.maxOpenPositions;
+  if (patch.setupMustBeApproved !== undefined)
+    out.setupMustBeApproved = patch.setupMustBeApproved;
+  return out;
+}
+
+function toDaily(r: RiskRules): DailyProtectionRules {
+  return {
+    maxDailyLossPercent: r.maxDailyLossPercent,
+    maxDailyTrades: r.maxDailyTrades,
+    maxRedTrades: r.maxRedTrades,
+    maxConsecutiveLosses: r.maxConsecutiveLosses,
+    cooldownAfterLossMinutes: r.cooldownAfterLossMinutes,
+    lockoutAfterMaxLoss: r.lockoutAfterMaxLoss,
+  };
+}
+function fromDaily(patch: Partial<DailyProtectionRules>): Partial<RiskRules> {
+  const out: Partial<RiskRules> = {};
+  if (patch.maxDailyLossPercent !== undefined)
+    out.maxDailyLossPercent = patch.maxDailyLossPercent;
+  if (patch.maxDailyTrades !== undefined)
+    out.maxDailyTrades = patch.maxDailyTrades;
+  if (patch.maxRedTrades !== undefined) out.maxRedTrades = patch.maxRedTrades;
+  if (patch.maxConsecutiveLosses !== undefined)
+    out.maxConsecutiveLosses = patch.maxConsecutiveLosses;
+  if (patch.cooldownAfterLossMinutes !== undefined)
+    out.cooldownAfterLossMinutes = patch.cooldownAfterLossMinutes;
+  if (patch.lockoutAfterMaxLoss !== undefined)
+    out.lockoutAfterMaxLoss = patch.lockoutAfterMaxLoss;
+  return out;
+}
+
+function toBehavior(r: RiskRules): BehaviorRules {
+  return {
+    noRevengeTrading: r.noRevengeTrading,
+    noTradingAfterEmotionalWarning: r.noTradingAfterEmotionalWarning,
+    noReentryWithinMinutes: r.noReentryWithinMinutes,
+    noTradesOutsideAllowedSetups: r.noTradesOutsideAllowedSetups,
+    noOvertrading: r.noOvertrading,
+  };
+}
+function fromBehavior(patch: Partial<BehaviorRules>): Partial<RiskRules> {
+  const out: Partial<RiskRules> = {};
+  if (patch.noRevengeTrading !== undefined)
+    out.noRevengeTrading = patch.noRevengeTrading;
+  if (patch.noTradingAfterEmotionalWarning !== undefined)
+    out.noTradingAfterEmotionalWarning = patch.noTradingAfterEmotionalWarning;
+  if (patch.noReentryWithinMinutes !== undefined)
+    out.noReentryWithinMinutes = patch.noReentryWithinMinutes;
+  if (patch.noTradesOutsideAllowedSetups !== undefined)
+    out.noTradesOutsideAllowedSetups = patch.noTradesOutsideAllowedSetups;
+  if (patch.noOvertrading !== undefined) out.noOvertrading = patch.noOvertrading;
+  return out;
+}
+
+function toIntervention(r: RiskRules): InterventionPreferences {
+  return {
+    warningLevel: r.warningLevel,
+    requireConfirmationBeforeOverride: r.requireConfirmationBeforeOverride,
+    reflectionPromptAfterOverride: r.reflectionPromptAfterOverride,
+  };
+}
+function fromIntervention(
+  patch: Partial<InterventionPreferences>,
+): Partial<RiskRules> {
+  const out: Partial<RiskRules> = {};
+  if (patch.warningLevel !== undefined) out.warningLevel = patch.warningLevel;
+  if (patch.requireConfirmationBeforeOverride !== undefined)
+    out.requireConfirmationBeforeOverride =
+      patch.requireConfirmationBeforeOverride;
+  if (patch.reflectionPromptAfterOverride !== undefined)
+    out.reflectionPromptAfterOverride = patch.reflectionPromptAfterOverride;
+  return out;
+}
 
 export function RulesRiskWorkspace() {
-  // Saved snapshot drives the "unsaved changes" indicator; draft is what the
-  // user is currently editing. Hydrating from localStorage in a post-mount
-  // effect (instead of a lazy useState initializer) is intentional — the
-  // alternatives would render the server snapshot, then differ on the client,
-  // causing a hydration mismatch when saved data exists.
-  const [saved, setSaved] = useState<RiskRulesConfig>(DEFAULT_RISK_RULES);
-  const [draft, setDraft] = useState<RiskRulesConfig>(DEFAULT_RISK_RULES);
+  // Saved snapshot comes from the store; local `draft` is just the in-flight
+  // edit buffer driving the form. On Save we commit the draft to the store
+  // via `saveRiskRules` (the slice action stamps `updatedAt`).
+  const saved = useAppStore((s) => s.riskRules);
+  const hasHydrated = useAppStore((s) => s._hasHydrated);
+  const persistRules = useAppStore((s) => s.saveRiskRules);
 
+  const [draft, setDraft] = useState<RiskRules>(saved);
+
+  // Sync the draft to the store after rehydration so the form reflects the
+  // user's actual saved rules instead of the default snapshot we initialized
+  // with. After this, the draft diverges only on user edits.
   useEffect(() => {
-    const loaded = loadRiskRules();
-    /* eslint-disable react-hooks/set-state-in-effect */
-    setSaved(loaded);
-    setDraft(loaded);
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
+    if (hasHydrated) {
+      /* eslint-disable-next-line react-hooks/set-state-in-effect */
+      setDraft(saved);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasHydrated]);
 
-  const dirty = JSON.stringify(saved) !== JSON.stringify(draft);
+  const dirty = useMemo(
+    () => JSON.stringify(saved) !== JSON.stringify(draft),
+    [saved, draft],
+  );
 
-  const patchAccount = (patch: Partial<RiskRulesConfig["account"]>) =>
-    setDraft((d) => ({ ...d, account: { ...d.account, ...patch } }));
-  const patchPerTrade = (patch: Partial<RiskRulesConfig["perTrade"]>) =>
-    setDraft((d) => ({ ...d, perTrade: { ...d.perTrade, ...patch } }));
-  const patchDaily = (patch: Partial<RiskRulesConfig["daily"]>) =>
-    setDraft((d) => ({ ...d, daily: { ...d.daily, ...patch } }));
-  const patchBehavior = (patch: Partial<RiskRulesConfig["behavior"]>) =>
-    setDraft((d) => ({ ...d, behavior: { ...d.behavior, ...patch } }));
-  const patchIntervention = (
-    patch: Partial<RiskRulesConfig["intervention"]>,
-  ) =>
-    setDraft((d) => ({ ...d, intervention: { ...d.intervention, ...patch } }));
-  const setAllowedSetups = (next: string[]) =>
-    setDraft((d) => ({ ...d, allowedSetups: next }));
+  const patch = (partial: Partial<RiskRules>) =>
+    setDraft((d) => ({ ...d, ...partial }));
 
   const handleSave = () => {
-    const next: RiskRulesConfig = {
-      ...draft,
-      lastUpdated: new Date().toISOString(),
-    };
-    saveRiskRules(next);
-    setSaved(next);
-    setDraft(next);
+    persistRules(draft);
     toast.success("Rules & Risk settings saved");
   };
 
   const handleReset = () => {
-    setDraft(DEFAULT_RISK_RULES);
+    setDraft(getDefaultRiskRules());
     toast.message("Defaults restored — click Save to persist");
   };
 
@@ -80,33 +199,33 @@ export function RulesRiskWorkspace() {
         {/* Left column */}
         <div className="flex flex-col gap-6">
           <AccountRiskSection
-            value={draft.account}
-            onChange={patchAccount}
-            lastUpdated={saved.lastUpdated}
+            value={toAccount(draft)}
+            onChange={(p) => patch(fromAccount(p))}
+            lastUpdated={saved.updatedAt}
           />
           <PerTradeRulesSection
-            value={draft.perTrade}
-            onChange={patchPerTrade}
+            value={toPerTrade(draft)}
+            onChange={(p) => patch(fromPerTrade(p))}
           />
           <AllowedSetupsSection
             value={draft.allowedSetups}
-            onChange={setAllowedSetups}
+            onChange={(next) => patch({ allowedSetups: next })}
           />
         </div>
 
         {/* Right column */}
         <div className="flex flex-col gap-6">
           <DailyProtectionSection
-            value={draft.daily}
-            onChange={patchDaily}
+            value={toDaily(draft)}
+            onChange={(p) => patch(fromDaily(p))}
           />
           <BehaviorRulesSection
-            value={draft.behavior}
-            onChange={patchBehavior}
+            value={toBehavior(draft)}
+            onChange={(p) => patch(fromBehavior(p))}
           />
           <InterventionPrefsSection
-            value={draft.intervention}
-            onChange={patchIntervention}
+            value={toIntervention(draft)}
+            onChange={(p) => patch(fromIntervention(p))}
           />
         </div>
       </div>

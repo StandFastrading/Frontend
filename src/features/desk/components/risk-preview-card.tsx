@@ -1,9 +1,9 @@
-import type { RiskCalculation, UserRules } from "@/features/desk/types";
+import type { RiskCalculationResult, RiskRules } from "@/types";
 import { cn } from "@/lib/utils";
 
 type Props = {
-  risk: RiskCalculation;
-  rules: UserRules;
+  risk: RiskCalculationResult;
+  rules: RiskRules;
 };
 
 function formatCurrency(value: number | null): string {
@@ -27,19 +27,19 @@ function formatRatio(value: number | null): string {
 
 export function RiskPreviewCard({ risk, rules }: Props) {
   const overTradeLimit =
-    risk.percentOfAccountAtRisk != null &&
-    risk.percentOfAccountAtRisk > rules.maxRiskPerTradePercent;
+    risk.accountRiskPercent != null &&
+    risk.accountRiskPercent > rules.baseRiskPerTradePercent;
 
   const overDailyLimit =
-    risk.projectedDailyRiskAfterTrade != null &&
-    risk.projectedDailyRiskAfterTrade > rules.maxDailyLossPercent;
+    risk.projectedDailyRiskPercent != null &&
+    risk.projectedDailyRiskPercent > rules.maxDailyLossPercent;
 
   const ratioTone =
-    risk.rewardToRiskRatio == null
+    risk.rewardRiskRatio == null
       ? "text-foreground"
-      : risk.rewardToRiskRatio >= 2
+      : risk.rewardRiskRatio >= 2
         ? "text-emerald-400"
-        : risk.rewardToRiskRatio >= 1
+        : risk.rewardRiskRatio >= 1
           ? "text-amber-400"
           : "text-rose-400";
 
@@ -58,7 +58,7 @@ export function RiskPreviewCard({ risk, rules }: Props) {
         <Stat label="Risk / Share" value={formatCurrency(risk.riskPerShare)} />
         <Stat
           label="Total Trade Risk"
-          value={formatCurrency(risk.totalTradeRisk)}
+          value={formatCurrency(risk.totalRisk)}
           tone={overTradeLimit ? "rose" : "default"}
         />
         <Stat
@@ -68,7 +68,7 @@ export function RiskPreviewCard({ risk, rules }: Props) {
         />
         <Stat
           label="Reward : Risk"
-          value={formatRatio(risk.rewardToRiskRatio)}
+          value={formatRatio(risk.rewardRiskRatio)}
           valueClassName={ratioTone}
         />
       </div>
@@ -76,13 +76,13 @@ export function RiskPreviewCard({ risk, rules }: Props) {
       <div className="flex flex-col gap-3 border-t border-border/40 pt-4">
         <RiskBar
           label="Account at Risk (This Trade)"
-          current={risk.percentOfAccountAtRisk}
-          limit={rules.maxRiskPerTradePercent}
+          current={risk.accountRiskPercent}
+          limit={rules.baseRiskPerTradePercent}
           breached={overTradeLimit}
         />
         <RiskBar
           label="Projected Daily Risk"
-          current={risk.projectedDailyRiskAfterTrade}
+          current={risk.projectedDailyRiskPercent}
           limit={rules.maxDailyLossPercent}
           breached={overDailyLimit}
         />

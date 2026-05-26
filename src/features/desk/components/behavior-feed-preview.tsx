@@ -1,7 +1,10 @@
 import { ArrowRight } from "lucide-react";
 
-import type { BehaviorEventTone } from "@/lib/behavior-events";
-import type { BehaviorEvent } from "@/features/desk/types";
+import {
+  BEHAVIOR_EVENT_DISPLAY,
+  type BehaviorEventTone,
+} from "@/lib/behavior-events";
+import type { BehaviorEvent } from "@/types";
 import { cn } from "@/lib/utils";
 
 const TONE: Record<BehaviorEventTone, string> = {
@@ -17,6 +20,15 @@ const DOT_TONE: Record<BehaviorEventTone, string> = {
   amber: "bg-amber-400",
   brand: "bg-brand",
 };
+
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 export function BehaviorFeedPreview({ events }: { events: BehaviorEvent[] }) {
   return (
@@ -36,34 +48,39 @@ export function BehaviorFeedPreview({ events }: { events: BehaviorEvent[] }) {
 
       <ul className="flex flex-col gap-4">
         {events.map((entry) => {
-          const Icon = entry.icon;
+          // Tone + icon are derived from the central display registry —
+          // never persisted on the event itself, so wording/iconography can
+          // be polished without breaking older saved records.
+          const display = BEHAVIOR_EVENT_DISPLAY[entry.eventType];
+          const Icon = display.icon;
+          const tone = display.tone;
           return (
             <li key={entry.id} className="flex gap-3">
               <div className="flex flex-col items-center gap-1 pt-1">
                 <span
                   className={cn(
                     "size-1.5 shrink-0 rounded-full",
-                    DOT_TONE[entry.tone],
+                    DOT_TONE[tone],
                   )}
                 />
                 <span className="w-14 text-[0.65rem] tabular-nums text-muted-foreground">
-                  {entry.time}
+                  {formatTime(entry.timestamp)}
                 </span>
               </div>
               <span
                 className={cn(
                   "flex size-7 shrink-0 items-center justify-center rounded-full ring-1",
-                  TONE[entry.tone],
+                  TONE[tone],
                 )}
               >
                 <Icon className="size-3.5" />
               </span>
               <div className="flex flex-1 flex-col gap-0.5 leading-tight">
                 <span className="text-sm font-semibold text-foreground">
-                  {entry.title}
+                  {entry.displayTitle}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {entry.description}
+                  {entry.displayDescription}
                 </span>
               </div>
             </li>

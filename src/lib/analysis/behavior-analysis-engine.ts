@@ -63,22 +63,39 @@ import { useAppStore } from "@/store";
 // -----------------------------------------------------------------------------
 // Scoring weights — single source of truth. Negative weights penalize;
 // positive weights credit. Tune here, never inline.
+//
+// SCORING PHILOSOPHY (post-credibility-fix):
+//   Discipline measures HOW CONTROLLED THE TRADER WAS UNDER PRESSURE, not
+//   how many checklist items they ticked. One severe behavioral collapse
+//   must outweigh many small positive actions. Negatives carry 5–10× the
+//   raw magnitude of positives so a single warning override doesn't get
+//   masked by a string of clean approvals.
+//
+//   The aggregator layer ([[behavioral-state-aggregator]]) caps the final
+//   displayed discipline score by behavioral state — locked_down can
+//   never read above 25, impulsive above 35, etc. This file produces the
+//   raw additive score; the ceiling is applied downstream.
 // -----------------------------------------------------------------------------
 export const BEHAVIOR_SCORING_WEIGHTS = {
-  // Negatives
-  warning_ignored: -8,
-  trade_activated_with_warnings: -6,
-  stop_widened: -10,
-  position_size_increased: -8,
-  mistake_logged: -5,
-  daily_risk_exceeded: -12,
-  max_trades_exceeded: -8,
-  losing_trade_after_ignored_warning: -10,
-  // Positives
+  // Negatives — severe penalties so behavioral collapse is reflected in
+  // the score, not papered over by a backlog of clean approvals.
+  warning_ignored: -25,
+  trade_activated_with_warnings: -18,
+  stop_widened: -25,
+  position_size_increased: -20,
+  mistake_logged: -10,
+  // Daily risk breach is single-shot but catastrophic — it represents the
+  // trader's hard guardrail being broken, so the score should reflect a
+  // genuine emergency.
+  daily_risk_exceeded: -50,
+  max_trades_exceeded: -20,
+  losing_trade_after_ignored_warning: -25,
+  // Positives — small/modest. Bounded so 10 clean trades can lift a session
+  // by ~10 points, but a single critical event still drops it by 25–50.
   trade_avoided: 5,
-  trade_revised: 4,
-  clean_approved_trade: 2,
-  clean_exit_at_plan: 4,
+  trade_revised: 3,
+  clean_approved_trade: 1,
+  clean_exit_at_plan: 5,
   reflection_added: 2,
 } as const;
 
@@ -126,9 +143,18 @@ type EscalationRule = {
 const BEHAVIOR_ESCALATION_RULES: Partial<
   Record<BehaviorScoringKey, EscalationRule>
 > = {
-  warning_ignored: { secondOccurrence: -12, thirdPlusOccurrence: -15 },
-  stop_widened: { secondOccurrence: -18, thirdPlusOccurrence: -18 },
-  trade_revised: { secondOccurrence: 2, thirdPlusOccurrence: 1 },
+  // Repeated overrides condition the trader to dismiss future warnings —
+  // the 3rd ignored warning is materially worse than the first, so the
+  // curve is steep.
+  warning_ignored: { secondOccurrence: -32, thirdPlusOccurrence: -40 },
+  stop_widened: { secondOccurrence: -35, thirdPlusOccurrence: -40 },
+  position_size_increased: {
+    secondOccurrence: -28,
+    thirdPlusOccurrence: -35,
+  },
+  // Positives decay aggressively — revising the SAME setup twice is
+  // indecision; thrice is closer to harmful churn than discipline.
+  trade_revised: { secondOccurrence: 1, thirdPlusOccurrence: 0 },
 };
 
 // Returns the total weighted contribution of `count` occurrences of `key`.

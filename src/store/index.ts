@@ -69,6 +69,14 @@ import {
   createUserSlice,
   type UserSlice,
 } from "@/store/slices/user-slice";
+import { createReflectionsSlice } from "@/store/slices/reflections-slice";
+import type {
+  DailyReflection,
+  NoteDraft,
+  ReflectionDraft,
+  SessionNote,
+  TradeReflection,
+} from "@/types";
 import type { AppStore } from "@/store/types";
 
 // `PersistedAppState` is the subset of the store that survives reloads.
@@ -88,6 +96,17 @@ type PersistedAppState = {
   monitoringEvents: MonitoringEvent[];
   sessions: TradingSession[];
   activeSessionId: string | null;
+  // Journal artifacts. Reflections are deduped per trading date; notes
+  // are freeform append-only. Trade reflections are deduped per
+  // tradeId. None of these are touched by `resetTodaysSession`.
+  reflections: DailyReflection[];
+  sessionNotes: SessionNote[];
+  tradeReflections: TradeReflection[];
+  // Auto-save drafts — written by useAutoSave on debounce; cleared by
+  // finalize. Persisted so a tab switch or browser reload doesn't lose
+  // in-progress writing.
+  reflectionDrafts: Record<string, ReflectionDraft>;
+  noteDraft: NoteDraft | null;
 };
 
 // Custom storage adapter — wraps the typed @/lib/storage helpers so the
@@ -145,6 +164,51 @@ function dropLegacyKeys() {
   clearState(SF_STORAGE_KEYS.legacyUserProfile);
 }
 
+// v1 reflection drafts were keyed by trading date. v2 re-keys by
+// session id so a session reset no longer pollutes the new session
+// with the prior session's in-progress text. Each entry is re-anchored
+// under its embedded `sessionId`; entries without a sessionId are
+// dropped (no honest way to attribute them).
+function migrateReflectionDraftsV1ToV2(
+  legacy: unknown,
+): Record<string, ReflectionDraft> {
+  if (!legacy || typeof legacy !== "object") return {};
+  const out: Record<string, ReflectionDraft> = {};
+  for (const value of Object.values(legacy as Record<string, unknown>)) {
+    if (!value || typeof value !== "object") continue;
+    const v = value as Record<string, unknown>;
+    const sessionId = typeof v.sessionId === "string" ? v.sessionId : null;
+    if (!sessionId) continue;
+    const tradingDate =
+      typeof v.tradingDate === "string" ? v.tradingDate : null;
+    if (!tradingDate) continue;
+    const updatedAt =
+      typeof v.updatedAt === "string" ? v.updatedAt : new Date().toISOString();
+    const answers =
+      v.answers && typeof v.answers === "object"
+        ? (v.answers as Record<string, string>)
+        : {};
+    const emotionalNotes =
+      typeof v.emotionalNotes === "string" ? v.emotionalNotes : "";
+    const freeformNotes =
+      typeof v.freeformNotes === "string" ? v.freeformNotes : "";
+    out[sessionId] = {
+      id:
+        typeof v.id === "string"
+          ? v.id
+          : `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      sessionId,
+      tradingDate,
+      answers,
+      emotionalNotes,
+      freeformNotes,
+      createdAt: typeof v.createdAt === "string" ? v.createdAt : updatedAt,
+      updatedAt,
+    };
+  }
+  return out;
+}
+
 // Single composed store. Each slice is independently testable; cross-slice
 // actions (like `checkTrade` reading riskRules + session and writing
 // behaviorEvents) hop between them via the shared `get()` closure.
@@ -162,6 +226,7 @@ export const useAppStore = create<AppStore>()(
       ...createClosedTradesSlice(set, get, api),
       ...createMonitoringEventsSlice(set, get, api),
       ...createTradeDeskSlice(set, get, api),
+      ...createReflectionsSlice(set, get, api),
       _hasHydrated: false,
       _setHasHydrated: (hydrated) =>
         set(() => ({ _hasHydrated: hydrated })),
@@ -169,7 +234,7 @@ export const useAppStore = create<AppStore>()(
     {
       name: SF_STORAGE_KEYS.appState,
       storage: sfStorage,
-      version: 1,
+      version: 2,
       // Persist only the slices that should survive a refresh. Validation,
       // modal state, and the derived dashboard metrics are intentionally
       // omitted — they're recomputed on demand.
@@ -188,7 +253,29 @@ export const useAppStore = create<AppStore>()(
           monitoringEvents: state.monitoringEvents,
           sessions: state.sessions,
           activeSessionId: state.activeSessionId,
+          reflections: state.reflections,
+          sessionNotes: state.sessionNotes,
+          tradeReflections: state.tradeReflections,
+          reflectionDrafts: state.reflectionDrafts,
+          noteDraft: state.noteDraft,
         }) satisfies PersistedAppState,
+      // Persist version migrations. v1 → v2 rewrites `reflectionDrafts`
+      // from `Record<tradingDate, draft>` to `Record<sessionId, draft>`
+      // so drafts no longer auto-load into the wrong session.
+      //
+      // For each legacy entry:
+      //   * If it carries a sessionId, re-key under that sessionId,
+      //     backfill `id` + `createdAt = updatedAt` to match the new
+      //     schema, and keep it recoverable.
+      //   * If it has no sessionId (legacy pre-session-boundary write),
+      //     drop it — there's no honest way to attribute it to a session.
+      migrate: (state, fromVersion) => {
+        const s = (state ?? {}) as Record<string, unknown>;
+        if (fromVersion < 2) {
+          s.reflectionDrafts = migrateReflectionDraftsV1ToV2(s.reflectionDrafts);
+        }
+        return s as unknown as PersistedAppState;
+      },
       // Runs on the client right before persisted state is merged in. If no
       // unified state exists yet, pull from the legacy per-domain keys and
       // promote them into the new shape, then drop the legacy keys.

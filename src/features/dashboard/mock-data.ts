@@ -6,8 +6,6 @@ import {
   CheckCircle2,
   Clock,
   Info,
-  Lock,
-  Timer,
   type LucideIcon,
 } from "lucide-react";
 
@@ -96,28 +94,6 @@ export const ACTIVE_RISK = {
   maxDailyLoss: { current: -0.68, max: -2.0, percent: 34 },
 } as const;
 
-export type ActiveIntervention = {
-  icon: LucideIcon;
-  title: string;
-  triggeredAt: string;
-  endsIn: string;
-};
-
-export const ACTIVE_INTERVENTIONS: ActiveIntervention[] = [
-  {
-    icon: Timer,
-    title: "Re-entry Cooldown",
-    triggeredAt: "Triggered: 10:42 AM",
-    endsIn: "Ends in 18 min",
-  },
-  {
-    icon: Lock,
-    title: "Loss Recovery Lockout",
-    triggeredAt: "Triggered: 11:07 AM",
-    endsIn: "Ends for today",
-  },
-];
-
 type PatternTone = "rose" | "amber" | "neutral";
 
 export type TodayPattern = {
@@ -165,21 +141,6 @@ export const PRE_SESSION_CHECKLIST = {
     { label: "Emotional note added", value: "Yes" },
   ],
 } as const;
-
-export type OpenPosition = {
-  ticker: string;
-  direction: "Long" | "Short";
-  size: string;
-  rValue: number;
-};
-
-export const OPEN_POSITIONS: OpenPosition[] = [
-  { ticker: "ESM4", direction: "Long", size: "2 Contracts", rValue: 0.42 },
-  { ticker: "NQM4", direction: "Short", size: "1 Contract", rValue: -0.18 },
-  { ticker: "AAPL", direction: "Long", size: "100 Shares", rValue: 0.21 },
-];
-
-export const POSITIONS_TOTAL_R = 0.45;
 
 export const RULES_STATUS = {
   configured: 8,

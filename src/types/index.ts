@@ -13,3 +13,4 @@ export * from "@/types/user-profile";
 export * from "@/types/behavior-event";
 export * from "@/types/validation";
 export * from "@/types/intervention";
+export * from "@/types/reflection";

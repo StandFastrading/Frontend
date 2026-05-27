@@ -5,6 +5,7 @@ export const ROUTES = {
   dashboard: "/dashboard",
   desk: "/desk",
   rulesRisk: "/rules-risk",
+  analytics: "/analytics",
   journal: "/journal",
   trades: "/trades",
   account: "/account",

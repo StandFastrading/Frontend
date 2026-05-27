@@ -22,6 +22,7 @@ import {
   clearAllMockData,
   clearMockSession,
 } from "@/features/auth/mock-session";
+import { useAppStore } from "@/store";
 import { cn } from "@/lib/utils";
 
 const iconMap = Lucide as unknown as Record<
@@ -33,6 +34,7 @@ export function Sidebar({ email }: { email: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const initials = (email || "ST").slice(0, 2).toUpperCase();
+  const resetTodaysSession = useAppStore((s) => s.resetTodaysSession);
 
   // Sign-out: clears the mock session cookie only. Onboarded flag is kept so
   // returning users go straight to /dashboard after their next sign-in. When
@@ -41,6 +43,24 @@ export function Sidebar({ email }: { email: string }) {
     clearMockSession();
     toast.success("Signed out");
     router.replace(ROUTES.login);
+    router.refresh();
+  };
+
+  // [TEMPORARY · DEV-ONLY] Reset today's session data only — for testing
+  // the Behavioral State Aggregator from a clean baseline. Preserves user
+  // profile, onboarding, risk rules, allowed setups, and prior-day
+  // history. Remove this menu entry before shipping.
+  const handleResetTodaysSession = () => {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        "Reset today's session data?\n\nThis clears today's active trades, behavior events, monitoring events, interventions, and closed trades, then starts a fresh session.\n\nPreserved: user profile, onboarding, risk rules, allowed setups, prior-day history.",
+      )
+    ) {
+      return;
+    }
+    resetTodaysSession();
+    toast.success("Today's session reset — clean baseline");
     router.refresh();
   };
 
@@ -109,23 +129,18 @@ export function Sidebar({ email }: { email: string }) {
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Enter Trade Desk CTA */}
-      <div className="my-4 flex flex-col gap-3 rounded-xl border border-white/15 bg-background/40 p-4">
-        <span className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+      {/* Trade Desk affordance — kept accessible at the bottom of the rail
+          but visually quieted so behavior-awareness surfaces (the dashboard)
+          stay dominant. Reads as a pinned utility link, not a hero CTA. */}
+      <Link
+        href={ROUTES.desk}
+        className="my-3 flex items-center justify-between gap-2 rounded-md border border-white/10 bg-background/20 px-3 py-2 text-xs font-medium text-foreground/80 transition-colors hover:border-white/20 hover:bg-foreground/[0.04] hover:text-foreground"
+      >
+        <span className="text-[0.7rem] uppercase tracking-[0.16em]">
           Enter Trade Desk
         </span>
-        <p className="text-xs leading-relaxed text-foreground/75">
-          Move to the live trading environment to execute, scan, and monitor
-          markets.
-        </p>
-        <Link
-          href={ROUTES.desk}
-          className="flex items-center justify-center gap-2 rounded-md bg-brand px-3 py-2 text-xs font-semibold text-brand-foreground transition-colors hover:bg-brand/90"
-        >
-          Enter Trade Desk
-          <ArrowRight className="size-3.5" />
-        </Link>
-      </div>
+        <ArrowRight className="size-3.5 text-muted-foreground" />
+      </Link>
 
       {/* User profile — wrapped in a bordered card so it reads as StandFast
           UI (the Next.js dev overlay's "N" button floats at bottom-left of
@@ -163,6 +178,15 @@ export function Sidebar({ email }: { email: string }) {
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleSignOut}>Sign out</DropdownMenuItem>
           <DropdownMenuSeparator />
+          {/* [TEMPORARY · DEV-ONLY] Reset today's session data only.
+              Used to validate the Behavioral State Aggregator from a
+              clean baseline. Remove this entry before production. */}
+          <DropdownMenuItem
+            onClick={handleResetTodaysSession}
+            className="text-amber-400 focus:text-amber-300"
+          >
+            DEV · Reset Today&rsquo;s Session
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={handleResetDemo}
             className="text-rose-400 focus:text-rose-300"

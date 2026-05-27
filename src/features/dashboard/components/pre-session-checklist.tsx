@@ -20,7 +20,7 @@ export function PreSessionChecklist() {
   const activeSession = useActiveSession();
 
   return (
-    <div className="flex h-full flex-col gap-5 rounded-xl border border-white/15 bg-card/60 p-5 backdrop-blur">
+    <div className="flex h-full flex-col gap-4 rounded-xl border border-white/10 bg-card/40 p-5 backdrop-blur">
       <div className="flex items-center justify-between">
         <span className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           Pre-Session Checklist

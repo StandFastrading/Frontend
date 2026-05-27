@@ -11,6 +11,7 @@ import type { MonitoringEventsSlice } from "@/store/slices/monitoring-events-sli
 import type { BehaviorEventsSlice } from "@/store/slices/behavior-events-slice";
 import type { InterventionsSlice } from "@/store/slices/interventions-slice";
 import type { SessionsSlice } from "@/store/slices/sessions-slice";
+import type { ReflectionsSlice } from "@/store/slices/reflections-slice";
 
 // Composed application state. Each slice contributes its own state + actions
 // and they're merged into one store so cross-slice actions (e.g. checkTrade
@@ -27,7 +28,8 @@ export type AppStore = UserSlice &
   MonitoringEventsSlice &
   BehaviorEventsSlice &
   InterventionsSlice &
-  SessionsSlice & {
+  SessionsSlice &
+  ReflectionsSlice & {
     // Set by the persist middleware after rehydration. UI gates that depend
     // on persisted data should wait for this to avoid hydration-mismatch
     // flicker (saved value differs from server-rendered default).

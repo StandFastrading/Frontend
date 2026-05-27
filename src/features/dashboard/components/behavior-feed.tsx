@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Activity } from "lucide-react";
 
 import {
   BEHAVIOR_EVENT_DISPLAY,
@@ -57,52 +57,71 @@ export function BehaviorFeed() {
         </span>
       </div>
 
-      <ul className="flex flex-col gap-4">
-        {events.slice(0, 6).map((entry) => {
-          const display = BEHAVIOR_EVENT_DISPLAY[entry.eventType];
-          const Icon = display.icon;
-          const tone = display.tone;
-          return (
-            <li key={entry.id} className="flex gap-3">
-              <div className="flex flex-col items-center gap-1 pt-1">
+      {events.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-white/10 bg-background/20 px-4 py-8 text-center">
+          <span className="flex size-10 items-center justify-center rounded-full bg-foreground/[0.04] text-muted-foreground ring-1 ring-white/10">
+            <Activity className="size-4" />
+          </span>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-semibold text-foreground">
+              No behavior events yet
+            </span>
+            <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">
+              Behavior events will appear here as trades, warnings,
+              interventions, and decisions are logged.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-4">
+          {events.slice(0, 6).map((entry) => {
+            const display = BEHAVIOR_EVENT_DISPLAY[entry.eventType];
+            const Icon = display.icon;
+            const tone = display.tone;
+            return (
+              <li key={entry.id} className="flex gap-3">
+                <div className="flex flex-col items-center gap-1 pt-1">
+                  <span
+                    className={cn(
+                      "size-1.5 shrink-0 rounded-full",
+                      DOT_TONE[tone],
+                    )}
+                  />
+                  <span className="w-14 text-[0.65rem] tabular-nums text-muted-foreground">
+                    {formatTime(entry.timestamp)}
+                  </span>
+                </div>
                 <span
                   className={cn(
-                    "size-1.5 shrink-0 rounded-full",
-                    DOT_TONE[tone],
+                    "flex size-7 shrink-0 items-center justify-center rounded-full ring-1",
+                    TONE[tone],
                   )}
-                />
-                <span className="w-14 text-[0.65rem] tabular-nums text-muted-foreground">
-                  {formatTime(entry.timestamp)}
+                >
+                  <Icon className="size-3.5" />
                 </span>
-              </div>
-              <span
-                className={cn(
-                  "flex size-7 shrink-0 items-center justify-center rounded-full ring-1",
-                  TONE[tone],
-                )}
-              >
-                <Icon className="size-3.5" />
-              </span>
-              <div className="flex flex-1 flex-col gap-0.5 leading-tight">
-                <span className="text-sm font-semibold text-foreground">
-                  {entry.displayTitle}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {entry.displayDescription}
-                </span>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+                <div className="flex flex-1 flex-col gap-0.5 leading-tight">
+                  <span className="text-sm font-semibold text-foreground">
+                    {entry.displayTitle}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {entry.displayDescription}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
-      <button
-        type="button"
-        className="mt-auto flex items-center gap-1.5 text-xs font-semibold text-brand transition-colors hover:text-brand/80"
-      >
-        View Full Behavior Log
-        <ArrowRight className="size-3.5" />
-      </button>
+      {events.length > 0 ? (
+        <button
+          type="button"
+          className="mt-auto flex items-center gap-1.5 text-xs font-semibold text-brand transition-colors hover:text-brand/80"
+        >
+          View Full Behavior Log
+          <ArrowRight className="size-3.5" />
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -8,6 +8,14 @@ import {
 import { EMPTY_TRADE_INPUT } from "@/store/slices/trade-desk-slice";
 import type { SliceCreator } from "@/store/types";
 
+// Today's record filter. Used by the DEV reset action below. Drops records
+// stamped with the current trading date; preserves anything from prior
+// days. Records with no `tradingDate` (legacy / pre-session-boundary) are
+// kept — they're already historical by definition.
+function notFromToday<T extends { tradingDate?: string }>(today: string) {
+  return (record: T) => record.tradingDate !== today;
+}
+
 // Sessions slice. Owns the daily trading-session boundary system.
 //
 // Two pieces of state live here:
@@ -39,6 +47,16 @@ export type SessionsSlice = {
   // there's no active session OR the active session belongs to a previous
   // calendar day, the stale session is closed and a fresh one starts.
   ensureSessionForToday: () => void;
+
+  // [TEMPORARY · DEV-ONLY] Wipes today's session-scoped records so the
+  // Behavioral State Aggregator can be tested from a clean baseline.
+  // Drops all active trades + every record stamped with today's
+  // tradingDate (behaviorEvents, monitoringEvents, interventions,
+  // closedTrades), then rolls a fresh session boundary. Preserves user
+  // profile, onboarding, risk rules, allowed setups, and prior days'
+  // history. This action is NOT a long-term feature — remove before
+  // shipping to production.
+  resetTodaysSession: () => void;
 };
 
 export const createSessionsSlice: SliceCreator<SessionsSlice> = (
@@ -119,5 +137,31 @@ export const createSessionsSlice: SliceCreator<SessionsSlice> = (
     // Either no active session or the active session is stale (yesterday).
     // Close + start fresh.
     get().startNewSession("regular");
+  },
+
+  // [TEMPORARY · DEV-ONLY]
+  // Wipes today's session-scoped event log + open positions, then rolls a
+  // fresh session boundary. Two-phase mutation:
+  //   1. Filter today's tradingDate out of every event collection +
+  //      empty the activeTrades list outright (open positions are by
+  //      definition "today's" exposure).
+  //   2. Call startNewSession() to reset session metrics + Trade Desk
+  //      in-flight state + create the new session record.
+  // Preserves: user, onboarding, riskRules, allowedSetups, sessions[]
+  // (the historical session log itself), and any prior-day records that
+  // carry a tradingDate other than today's.
+  resetTodaysSession: () => {
+    const today = getCurrentTradingDate();
+    const isToday = notFromToday(today);
+    set((state) => ({
+      activeTrades: [],
+      closedTrades: state.closedTrades.filter(isToday),
+      behaviorEvents: state.behaviorEvents.filter(isToday),
+      monitoringEvents: state.monitoringEvents.filter(isToday),
+      interventions: state.interventions.filter(isToday),
+    }));
+    // Rolls the session boundary, resets SessionMetrics defaults, and
+    // clears Trade Desk in-flight form/validation/snapshot state.
+    get().startNewSession();
   },
 });

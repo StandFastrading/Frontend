@@ -116,7 +116,7 @@ export function CompletePage() {
   const handleEnterDashboard = () => {
     // Set both flags before navigating — handles the case where a user
     // reaches /onboarding without an active session (otherwise middleware
-    // sees no session cookie on /dashboard and redirects to /login).
+    // sees no session cookie on /dashboard and redirects to /auth).
     setMockSession();
     setMockOnboarded();
     router.push(ROUTES.dashboard);

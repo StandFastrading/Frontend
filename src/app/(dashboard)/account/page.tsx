@@ -10,7 +10,7 @@ export default async function ProfilePage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect(ROUTES.login);
+  if (!user) redirect(ROUTES.auth);
 
   const displayName =
     typeof user.user_metadata?.display_name === "string"

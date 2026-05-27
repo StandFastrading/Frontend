@@ -34,7 +34,7 @@ export function MarketingHeader() {
             </a>
           ))}
           <Link
-            href={ROUTES.login}
+            href={ROUTES.auth}
             className={cn(
               buttonVariants({ variant: "ghost", size: "sm" }),
               "text-muted-foreground hover:text-foreground",
@@ -45,7 +45,7 @@ export function MarketingHeader() {
         </nav>
         <div className="flex items-center gap-2">
           <Link
-            href={ROUTES.login}
+            href={ROUTES.auth}
             className={cn(
               buttonVariants({ variant: "ghost", size: "sm" }),
               "md:hidden",

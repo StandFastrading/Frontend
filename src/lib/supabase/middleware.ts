@@ -8,7 +8,7 @@ import {
 } from "@/features/auth/mock-session";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/desk", "/rules-risk", "/journal", "/trades", "/account"];
-const AUTH_PREFIXES = ["/login", "/signup"];
+const AUTH_PREFIXES = ["/auth"];
 
 export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
@@ -82,7 +82,7 @@ export async function updateSession(request: NextRequest) {
 
   if (!user) {
     const url = request.nextUrl.clone();
-    url.pathname = ROUTES.login;
+    url.pathname = ROUTES.auth;
     url.searchParams.set("next", path);
     return NextResponse.redirect(url);
   }

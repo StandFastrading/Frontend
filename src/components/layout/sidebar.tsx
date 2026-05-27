@@ -42,7 +42,7 @@ export function Sidebar({ email }: { email: string }) {
   const handleSignOut = () => {
     clearMockSession();
     toast.success("Signed out");
-    router.replace(ROUTES.login);
+    router.replace(ROUTES.auth);
     router.refresh();
   };
 
@@ -70,14 +70,14 @@ export function Sidebar({ email }: { email: string }) {
     if (
       typeof window !== "undefined" &&
       !window.confirm(
-        "Reset all demo data?\n\nThis clears your session, onboarding state, saved Rules & Risk settings, and decision log. You'll be sent back to /login as a brand-new user.",
+        "Reset all demo data?\n\nThis clears your session, onboarding state, saved Rules & Risk settings, and decision log. You'll be sent back to /auth as a brand-new user.",
       )
     ) {
       return;
     }
     clearAllMockData();
     toast.success("Demo data cleared");
-    router.replace(ROUTES.login);
+    router.replace(ROUTES.auth);
     router.refresh();
   };
 

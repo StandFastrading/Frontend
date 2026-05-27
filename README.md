@@ -44,13 +44,13 @@ npm run dev                    # http://localhost:3000
 | `/` | Marketing home with header (Docs / Sign in / Get started) |
 | `/docs` | Landing grid of docs sections |
 | `/docs/[slug]` | MDX article from `content/docs/<slug>.mdx`, frontmatter-driven `<title>` |
-| `/login`, `/signup` | Email/password auth via Supabase; sign-up sends a confirm email if enabled in the Supabase dashboard |
+| `/auth` | Combined sign-in / sign-up via Supabase; toggle between modes with the tabs at the top of the card |
 | `/dashboard` | Authenticated app shell — left sidebar (Dashboard / Journal / Trades / Account) + topbar with user menu (avatar dropdown → Account / Sign out) |
 | `/dashboard`, `/journal`, `/trades` | Placeholder content; real features land later |
 | `/account` | Profile tab — edit display name (Supabase `user_metadata`) |
 | `/account/security` | Security tab — change password |
 
-`/dashboard/*` and `/account/*` are gated by [src/proxy.ts](src/proxy.ts) — unauthenticated requests 307 → `/login?next=<original-path>`.
+`/dashboard/*` and `/account/*` are gated by [src/proxy.ts](src/proxy.ts) — unauthenticated requests 307 → `/auth?next=<original-path>`.
 
 ## Layout and conventions
 

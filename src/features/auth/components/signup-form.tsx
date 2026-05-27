@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -20,9 +19,13 @@ import { signUpWithPassword } from "../api";
 import { setMockSession } from "../mock-session";
 
 const fieldClass =
-  "h-11 border-cyan-500/20 bg-[#0a1020] text-base text-white placeholder:text-slate-600 focus-visible:border-cyan-400 focus-visible:ring-cyan-400/30";
+  "h-11 border-white/15 bg-input/40 text-base text-foreground placeholder:text-muted-foreground/60 focus-visible:border-brand focus-visible:ring-brand/30";
 
-export function SignupForm() {
+export function SignupForm({
+  onSwitchToLogin,
+}: {
+  onSwitchToLogin?: () => void;
+}) {
   const router = useRouter();
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
 
@@ -74,25 +77,26 @@ export function SignupForm() {
   if (submittedEmail) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
-        <div className="flex size-12 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-400/[0.10] text-cyan-300">
+        <div className="flex size-12 items-center justify-center rounded-full border border-brand/30 bg-brand/[0.10] text-brand">
           <Mail className="size-5" />
         </div>
         <div className="flex flex-col gap-1">
-          <p className="text-sm font-semibold text-white">Check your inbox</p>
-          <p className="text-sm text-slate-300">
+          <p className="text-sm font-semibold text-foreground">
+            Check your inbox
+          </p>
+          <p className="text-sm text-muted-foreground">
             We sent a confirmation link to{" "}
-            <span className="font-semibold text-cyan-300">
-              {submittedEmail}
-            </span>
-            . Open it to finish setting up your account.
+            <span className="font-semibold text-brand">{submittedEmail}</span>.
+            Open it to finish setting up your account.
           </p>
         </div>
-        <Link
-          href={ROUTES.login}
-          className="text-sm font-semibold text-cyan-300 underline-offset-4 hover:text-cyan-200 hover:underline"
+        <button
+          type="button"
+          onClick={onSwitchToLogin}
+          className="text-sm font-semibold text-brand underline-offset-4 transition-colors hover:text-brand/80 hover:underline"
         >
           Back to sign in
-        </Link>
+        </button>
       </div>
     );
   }
@@ -101,7 +105,6 @@ export function SignupForm() {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        // Mock-mode signup: set session cookie and go straight to onboarding.
         setMockSession();
         router.push(ROUTES.onboarding);
         router.refresh();
@@ -110,7 +113,7 @@ export function SignupForm() {
       noValidate
     >
       <div className="flex flex-col gap-2">
-        <Label htmlFor="fullName" className="text-slate-300">
+        <Label htmlFor="fullName" className="text-foreground/80">
           Full name
         </Label>
         <Input
@@ -128,7 +131,7 @@ export function SignupForm() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="email" className="text-slate-300">
+        <Label htmlFor="email" className="text-foreground/80">
           Email
         </Label>
         <Input
@@ -147,7 +150,7 @@ export function SignupForm() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="password" className="text-slate-300">
+        <Label htmlFor="password" className="text-foreground/80">
           Password
         </Label>
         <Input
@@ -167,7 +170,7 @@ export function SignupForm() {
 
       <div className="flex items-center gap-3 pt-2">
         <div className="h-px flex-1 bg-white/[0.08]" />
-        <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
           {paymentMethod === "trial" ? "Trial Code" : "Payment"}
         </span>
         <div className="h-px flex-1 bg-white/[0.08]" />
@@ -176,7 +179,7 @@ export function SignupForm() {
       {paymentMethod === "card" ? (
         <div className="flex flex-col gap-4 duration-200 animate-in fade-in slide-in-from-top-1">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="cardNumber" className="text-slate-300">
+            <Label htmlFor="cardNumber" className="text-foreground/80">
               Card number
             </Label>
             <div className="relative">
@@ -188,7 +191,7 @@ export function SignupForm() {
                 {...form.register("cardNumber")}
                 className={cn(fieldClass, "pr-10")}
               />
-              <CreditCard className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
+              <CreditCard className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             </div>
             {form.formState.errors.cardNumber && (
               <p className="text-xs text-destructive">
@@ -199,7 +202,7 @@ export function SignupForm() {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="expiry" className="text-slate-300">
+              <Label htmlFor="expiry" className="text-foreground/80">
                 Expiry
               </Label>
               <Input
@@ -217,7 +220,7 @@ export function SignupForm() {
               )}
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="cvc" className="text-slate-300">
+              <Label htmlFor="cvc" className="text-foreground/80">
                 CVC
               </Label>
               <Input
@@ -238,7 +241,7 @@ export function SignupForm() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="zip" className="text-slate-300">
+            <Label htmlFor="zip" className="text-foreground/80">
               ZIP / Postal code
             </Label>
             <Input
@@ -259,7 +262,7 @@ export function SignupForm() {
           <button
             type="button"
             onClick={() => switchTo("trial")}
-            className="flex items-center justify-center gap-1.5 text-xs font-semibold text-cyan-300 transition-colors hover:text-cyan-200"
+            className="flex items-center justify-center gap-1.5 text-xs font-semibold text-brand transition-colors hover:text-brand/80"
           >
             <Gift className="size-3.5" />
             I have a trial code
@@ -268,7 +271,7 @@ export function SignupForm() {
       ) : (
         <div className="flex flex-col gap-4 duration-200 animate-in fade-in slide-in-from-top-1">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="trialCode" className="text-slate-300">
+            <Label htmlFor="trialCode" className="text-foreground/80">
               Trial code
             </Label>
             <div className="relative">
@@ -279,14 +282,14 @@ export function SignupForm() {
                 {...form.register("trialCode")}
                 className={cn(fieldClass, "pr-10 font-mono tracking-wide")}
               />
-              <Gift className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-lime-400/80" />
+              <Gift className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-emerald-400/80" />
             </div>
             {form.formState.errors.trialCode && (
               <p className="text-xs text-destructive">
                 {form.formState.errors.trialCode.message}
               </p>
             )}
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-muted-foreground">
               No card required. We&apos;ll prompt for payment when your trial
               ends.
             </p>
@@ -295,7 +298,7 @@ export function SignupForm() {
           <button
             type="button"
             onClick={() => switchTo("card")}
-            className="flex items-center justify-center gap-1.5 text-xs font-semibold text-cyan-300 transition-colors hover:text-cyan-200"
+            className="flex items-center justify-center gap-1.5 text-xs font-semibold text-brand transition-colors hover:text-brand/80"
           >
             <CreditCard className="size-3.5" />
             Use card instead
@@ -307,12 +310,9 @@ export function SignupForm() {
         type="submit"
         size="lg"
         className={cn(
-          "mt-2 h-12 w-full text-base font-semibold tracking-wide text-lime-950",
-          "bg-gradient-to-r from-lime-400 to-lime-500",
-          "shadow-[0_0_30px_-5px_rgba(132,204,22,0.5)]",
-          "transition-all duration-200 ease-out",
-          "hover:-translate-y-0.5 hover:from-lime-300 hover:to-lime-400 hover:shadow-[0_0_45px_-5px_rgba(132,204,22,0.65)]",
-          "disabled:translate-y-0 disabled:opacity-40 disabled:shadow-none",
+          "mt-2 h-12 w-full bg-brand text-base font-semibold tracking-wide text-brand-foreground",
+          "transition-colors hover:bg-brand/90",
+          "disabled:opacity-50",
         )}
       >
         {mutation.isPending
@@ -323,14 +323,15 @@ export function SignupForm() {
         {!mutation.isPending && <ArrowRight />}
       </Button>
 
-      <p className="text-center text-sm text-slate-400">
+      <p className="text-center text-sm text-muted-foreground">
         Already have an account?{" "}
-        <Link
-          href={ROUTES.login}
-          className="font-semibold text-cyan-300 underline-offset-4 hover:text-cyan-200 hover:underline"
+        <button
+          type="button"
+          onClick={onSwitchToLogin}
+          className="font-semibold text-brand underline-offset-4 transition-colors hover:text-brand/80 hover:underline"
         >
           Sign in
-        </Link>
+        </button>
       </p>
     </form>
   );

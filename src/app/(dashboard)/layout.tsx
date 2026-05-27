@@ -1,6 +1,9 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+// Skip prerender — this layout reads cookies and Supabase env vars at request time.
+export const dynamic = "force-dynamic";
+
 export default async function DashboardLayout({
   children,
 }: {

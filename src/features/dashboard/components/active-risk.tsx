@@ -1,44 +1,115 @@
-import { ArrowRight } from "lucide-react";
+"use client";
 
-import { ACTIVE_RISK } from "@/features/dashboard/mock-data";
+import { ArrowRight, ShieldAlert } from "lucide-react";
+
+import { useAppStore } from "@/store";
+import { useSessionIntelligence } from "@/store/slices/session-intelligence-slice";
+import { cn } from "@/lib/utils";
+
+// Reads daily risk usage + open exposure from the Session Intelligence layer.
+// Presentation rule: when a threshold is breached the widget switches to a
+// short, human-readable status ("Daily loss limit reached" / "Risk threshold
+// exceeded") instead of rendering raw negative percentages. The underlying
+// `session.dailyLossUsedPercent` math is left untouched; only the visible
+// number is clamped + reworded.
 
 function RBar({
   current,
   max,
   percent,
   variant,
+  breached,
+  breachedLabel,
 }: {
   current: number;
   max: number;
   percent: number;
   variant: "brand" | "rose";
+  breached: boolean;
+  breachedLabel: string;
 }) {
   const barColor = variant === "brand" ? "bg-brand" : "bg-rose-500";
+
+  if (breached) {
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2 text-base font-semibold leading-none text-rose-300">
+            <ShieldAlert className="size-4 shrink-0" />
+            {breachedLabel}
+          </span>
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
+          <div className="h-full w-full rounded-full bg-rose-500" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between">
         <span className="text-2xl font-semibold leading-none tabular-nums text-foreground">
-          {current.toFixed(2)}R
+          {current.toFixed(2)}%
           <span className="text-sm font-normal text-muted-foreground">
             {" "}
-            / {max.toFixed(2)}R
+            / {max.toFixed(2)}%
           </span>
         </span>
         <span className="text-sm font-semibold tabular-nums text-muted-foreground">
-          {percent}%
+          {percent.toFixed(0)}%
         </span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
         <div
-          className={`h-full rounded-full ${barColor}`}
-          style={{ width: `${percent}%` }}
+          className={cn("h-full rounded-full", barColor)}
+          style={{ width: `${Math.min(100, percent)}%` }}
         />
       </div>
     </div>
   );
 }
 
+function formatPnL(value: number): string {
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  return `${sign}$${Math.abs(value).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export function ActiveRisk() {
+  const session = useAppStore((s) => s.session);
+  const riskRules = useAppStore((s) => s.riskRules);
+  const activeTrades = useAppStore((s) => s.activeTrades);
+  const intel = useSessionIntelligence();
+
+  const dailyMax = riskRules.maxDailyLossPercent;
+  const dailyUsage = Math.max(0, session.dailyLossUsedPercent);
+  const dailyPercent = dailyMax > 0 ? (dailyUsage / dailyMax) * 100 : 0;
+  // Threshold breach: visible bar/label switches to status copy. Math is
+  // unchanged — `dailyUsage` keeps its raw value for analytics + Reports.
+  const dailyBreached = dailyUsage > dailyMax && dailyMax > 0;
+
+  const openRiskDollars = activeTrades
+    .filter((t) => t.status === "active")
+    .reduce((sum, t) => sum + (t.currentRisk ?? t.originalRisk ?? 0), 0);
+  const openRiskPercent =
+    riskRules.accountSize > 0
+      ? (openRiskDollars / riskRules.accountSize) * 100
+      : 0;
+
+  // Floors at 0 so we never display a negative slack number when the cap
+  // has been exceeded — the breach label below makes the state clear.
+  const potentialRiskPercent = Math.max(0, dailyMax - dailyUsage);
+
+  const pnLTone =
+    intel.pnLToday > 0
+      ? "text-emerald-400"
+      : intel.pnLToday < 0
+        ? "text-rose-400"
+        : "text-foreground";
+
   return (
     <div className="flex h-full flex-col gap-5 rounded-xl border border-white/15 bg-card/60 p-5 backdrop-blur">
       <span className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -50,10 +121,12 @@ export function ActiveRisk() {
           Daily Risk Usage
         </span>
         <RBar
-          current={ACTIVE_RISK.dailyUsage.current}
-          max={ACTIVE_RISK.dailyUsage.max}
-          percent={ACTIVE_RISK.dailyUsage.percent}
-          variant="brand"
+          current={dailyUsage}
+          max={dailyMax}
+          percent={dailyPercent}
+          variant={dailyPercent >= 80 ? "rose" : "brand"}
+          breached={dailyBreached}
+          breachedLabel="Risk threshold exceeded"
         />
       </div>
 
@@ -61,13 +134,26 @@ export function ActiveRisk() {
         <div className="flex items-baseline justify-between">
           <dt className="text-muted-foreground">Open Risk</dt>
           <dd className="font-semibold tabular-nums text-foreground">
-            {ACTIVE_RISK.openRisk.toFixed(2)}R
+            {openRiskPercent.toFixed(2)}%
           </dd>
         </div>
         <div className="flex items-baseline justify-between">
-          <dt className="text-muted-foreground">Potential Risk</dt>
-          <dd className="font-semibold tabular-nums text-foreground">
-            {ACTIVE_RISK.potentialRisk.toFixed(2)}R
+          <dt className="text-muted-foreground">Remaining Budget</dt>
+          <dd
+            className={cn(
+              "font-semibold tabular-nums",
+              dailyBreached ? "text-rose-300" : "text-foreground",
+            )}
+          >
+            {dailyBreached
+              ? "Limit reached"
+              : `${potentialRiskPercent.toFixed(2)}%`}
+          </dd>
+        </div>
+        <div className="flex items-baseline justify-between">
+          <dt className="text-muted-foreground">P/L Today</dt>
+          <dd className={cn("font-semibold tabular-nums", pnLTone)}>
+            {formatPnL(intel.pnLToday)}
           </dd>
         </div>
       </dl>
@@ -77,10 +163,12 @@ export function ActiveRisk() {
           Max Daily Loss
         </span>
         <RBar
-          current={ACTIVE_RISK.maxDailyLoss.current}
-          max={ACTIVE_RISK.maxDailyLoss.max}
-          percent={ACTIVE_RISK.maxDailyLoss.percent}
+          current={dailyUsage}
+          max={dailyMax}
+          percent={dailyPercent}
           variant="rose"
+          breached={dailyBreached}
+          breachedLabel="Daily loss limit breached"
         />
       </div>
 

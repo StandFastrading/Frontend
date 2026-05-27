@@ -1,10 +1,26 @@
+"use client";
+
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 
+import { useActiveSession } from "@/lib/sessions/session-helpers";
 import { PRE_SESSION_CHECKLIST } from "@/features/dashboard/mock-data";
 
+function formatSessionLabel(tradingDate: string | undefined): string {
+  if (!tradingDate) return "—";
+  const d = new Date(tradingDate);
+  if (Number.isNaN(d.getTime())) return tradingDate;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 export function PreSessionChecklist() {
+  const activeSession = useActiveSession();
+
   return (
-    <div className="flex h-full flex-col gap-5 rounded-xl border border-white/15 bg-card/60 p-5 backdrop-blur">
+    <div className="flex h-full flex-col gap-4 rounded-xl border border-white/10 bg-card/40 p-5 backdrop-blur">
       <div className="flex items-center justify-between">
         <span className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           Pre-Session Checklist
@@ -13,6 +29,24 @@ export function PreSessionChecklist() {
           {PRE_SESSION_CHECKLIST.completed} / {PRE_SESSION_CHECKLIST.total}{" "}
           Completed
         </span>
+      </div>
+
+      {/* Active session marker — surfaces the boundary so the trader can
+          tell at a glance whether the dashboard numbers belong to today or
+          a session left open from yesterday. The Start New Session action
+          lives in the dashboard header so there's a single source of
+          truth. */}
+      <div className="flex items-center justify-between rounded-lg border border-white/10 bg-background/30 px-3 py-2.5">
+        <div className="flex flex-col leading-tight">
+          <span className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Active Session
+          </span>
+          <span className="text-xs font-semibold text-foreground">
+            {activeSession
+              ? formatSessionLabel(activeSession.tradingDate)
+              : "No session"}
+          </span>
+        </div>
       </div>
 
       <ul className="flex flex-col gap-3">

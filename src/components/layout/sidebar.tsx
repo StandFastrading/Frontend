@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as Lucide from "lucide-react";
-import { ArrowRight, Settings, ShieldCheck } from "lucide-react";
-import { useMutation } from "@tanstack/react-query";
+import { ArrowRight, ChevronUp, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -18,7 +18,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { dashboardNav } from "@/config/nav";
 import { ROUTES } from "@/config/routes";
-import { signOut } from "@/features/auth/api";
+import {
+  clearAllMockData,
+  clearMockSession,
+} from "@/features/auth/mock-session";
+import { useAppStore } from "@/store";
 import { cn } from "@/lib/utils";
 
 const iconMap = Lucide as unknown as Record<
@@ -29,21 +33,56 @@ const iconMap = Lucide as unknown as Record<
 export function Sidebar({ email }: { email: string }) {
   const pathname = usePathname();
   const router = useRouter();
-  const initials = email.slice(0, 2).toUpperCase();
+  const initials = (email || "ST").slice(0, 2).toUpperCase();
+  const resetTodaysSession = useAppStore((s) => s.resetTodaysSession);
 
-  const mutation = useMutation({
-    mutationFn: signOut,
-    onSuccess: () => {
-      router.replace(ROUTES.login);
-      router.refresh();
-    },
-    onError: (err: Error) => {
-      toast.error(err.message || "Could not sign out");
-    },
-  });
+  // Sign-out: clears the mock session cookie only. Onboarded flag is kept so
+  // returning users go straight to /dashboard after their next sign-in. When
+  // real Supabase auth lands, call supabase.auth.signOut() here too.
+  const handleSignOut = () => {
+    clearMockSession();
+    toast.success("Signed out");
+    router.replace(ROUTES.login);
+    router.refresh();
+  };
+
+  // [TEMPORARY · DEV-ONLY] Reset today's session data only — for testing
+  // the Behavioral State Aggregator from a clean baseline. Preserves user
+  // profile, onboarding, risk rules, allowed setups, and prior-day
+  // history. Remove this menu entry before shipping.
+  const handleResetTodaysSession = () => {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        "Reset today's session data?\n\nThis clears today's active trades, behavior events, monitoring events, interventions, and closed trades, then starts a fresh session.\n\nPreserved: user profile, onboarding, risk rules, allowed setups, prior-day history.",
+      )
+    ) {
+      return;
+    }
+    resetTodaysSession();
+    toast.success("Today's session reset — clean baseline");
+    router.refresh();
+  };
+
+  // Dev-only: full demo wipe. Confirms first because it's destructive
+  // (deletes saved Rules & Risk settings + decision log).
+  const handleResetDemo = () => {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        "Reset all demo data?\n\nThis clears your session, onboarding state, saved Rules & Risk settings, and decision log. You'll be sent back to /login as a brand-new user.",
+      )
+    ) {
+      return;
+    }
+    clearAllMockData();
+    toast.success("Demo data cleared");
+    router.replace(ROUTES.login);
+    router.refresh();
+  };
 
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-border/60 bg-card/40 p-4 backdrop-blur md:flex">
+    <aside className="hidden w-60 shrink-0 flex-col border-r border-border/60 bg-card/40 p-4 pb-14 backdrop-blur md:flex">
       {/* Brand */}
       <Link
         href={ROUTES.home}
@@ -90,29 +129,26 @@ export function Sidebar({ email }: { email: string }) {
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Enter Trade Desk CTA */}
-      <div className="my-4 flex flex-col gap-3 rounded-xl border border-white/15 bg-background/40 p-4">
-        <span className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+      {/* Trade Desk affordance — kept accessible at the bottom of the rail
+          but visually quieted so behavior-awareness surfaces (the dashboard)
+          stay dominant. Reads as a pinned utility link, not a hero CTA. */}
+      <Link
+        href={ROUTES.desk}
+        className="my-3 flex items-center justify-between gap-2 rounded-md border border-white/10 bg-background/20 px-3 py-2 text-xs font-medium text-foreground/80 transition-colors hover:border-white/20 hover:bg-foreground/[0.04] hover:text-foreground"
+      >
+        <span className="text-[0.7rem] uppercase tracking-[0.16em]">
           Enter Trade Desk
         </span>
-        <p className="text-xs leading-relaxed text-foreground/75">
-          Move to the live trading environment to execute, scan, and monitor
-          markets.
-        </p>
-        <button
-          type="button"
-          className="flex items-center justify-center gap-2 rounded-md bg-brand px-3 py-2 text-xs font-semibold text-brand-foreground transition-colors hover:bg-brand/90"
-        >
-          Enter Trade Desk
-          <ArrowRight className="size-3.5" />
-        </button>
-      </div>
+        <ArrowRight className="size-3.5 text-muted-foreground" />
+      </Link>
 
-      {/* User profile */}
+      {/* User profile — wrapped in a bordered card so it reads as StandFast
+          UI (the Next.js dev overlay's "N" button floats at bottom-left of
+          the viewport and used to be the only thing visible here). */}
       <DropdownMenu>
-        <DropdownMenuTrigger className="flex items-center gap-3 rounded-md p-1.5 text-left outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-brand/40">
-          <Avatar className="size-8 ring-1 ring-border/60">
-            <AvatarFallback className="bg-card text-xs font-semibold">
+        <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-xl border border-white/15 bg-background/40 p-2 text-left outline-none transition-colors hover:border-white/25 hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-brand/40">
+          <Avatar className="size-9 ring-1 ring-brand/30">
+            <AvatarFallback className="bg-brand/15 text-xs font-semibold text-brand">
               {initials}
             </AvatarFallback>
           </Avatar>
@@ -124,21 +160,38 @@ export function Sidebar({ email }: { email: string }) {
               Pro Plan
             </span>
           </div>
-          <Settings className="size-4 text-muted-foreground" />
+          <ChevronUp className="size-4 text-muted-foreground" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top">
-          <DropdownMenuLabel className="font-normal text-muted-foreground">
-            {email}
-          </DropdownMenuLabel>
+          {/* DropdownMenuLabel is a Base UI Menu.GroupLabel under the hood —
+              it throws if not wrapped in a Menu.Group, hence the explicit
+              DropdownMenuGroup here. Defensive `email || "Demo user"`
+              prevents an empty label row. */}
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="font-normal text-muted-foreground">
+              {email || "Demo user"}
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => router.push(ROUTES.account)}>
             Account
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleSignOut}>Sign out</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          {/* [TEMPORARY · DEV-ONLY] Reset today's session data only.
+              Used to validate the Behavioral State Aggregator from a
+              clean baseline. Remove this entry before production. */}
           <DropdownMenuItem
-            onClick={() => mutation.mutate()}
-            disabled={mutation.isPending}
+            onClick={handleResetTodaysSession}
+            className="text-amber-400 focus:text-amber-300"
           >
-            {mutation.isPending ? "Signing out..." : "Sign out"}
+            DEV · Reset Today&rsquo;s Session
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={handleResetDemo}
+            className="text-rose-400 focus:text-rose-300"
+          >
+            Reset Demo Data
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

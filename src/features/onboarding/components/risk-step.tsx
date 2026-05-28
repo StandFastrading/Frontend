@@ -21,6 +21,7 @@ import {
 
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useAppStore } from "@/store";
 import { PickCard } from "./pick-card";
 import { StepFooter } from "./step-footer";
 
@@ -61,7 +62,19 @@ function formatCurrency(n: number) {
 export function RiskStep() {
   const router = useRouter();
 
-  const [accountSizeText, setAccountSizeText] = useState("10,000.00");
+  // accountSize is shared state — `riskRules.accountSize` is the single
+  // source of truth used by the Risk Rules page, the Trade Desk validation
+  // engine, and the dashboard metrics. Hydrate the local form state from
+  // it so revisiting this step always shows the user's current value, and
+  // commit back on Continue via `setAccountSize` so the rest of the app
+  // picks the change up immediately.
+  const storedAccountSize = useAppStore((s) => s.riskRules.accountSize);
+  const hasHydrated = useAppStore((s) => s._hasHydrated);
+  const setAccountSize = useAppStore((s) => s.setAccountSize);
+
+  const [accountSizeText, setAccountSizeText] = useState(() =>
+    formatCurrency(storedAccountSize > 0 ? storedAccountSize : 10_000),
+  );
   const [riskTolerance, setRiskTolerance] = useState<RiskToleranceId>("moderate");
   const [riskPerTrade, setRiskPerTrade] = useState(1.0);
   const [dailyLossLimit, setDailyLossLimit] = useState(3.0);
@@ -69,6 +82,19 @@ export function RiskStep() {
   const [maxDrawdown, setMaxDrawdown] = useState(10.0);
   const [positionSizing, setPositionSizing] = useState<string | null>("percent");
   const [additionalRules, setAdditionalRules] = useState("");
+
+  // After persist rehydration, replace the SSR/default seed with the real
+  // saved value. Runs once per hydration — `setAccountSizeText` is stable.
+  // The set-state-in-effect disable mirrors the same pattern used by
+  // RulesRiskWorkspace's hydration sync — we have no external system to
+  // subscribe to, just the one-shot rehydrated value.
+  useEffect(() => {
+    if (hasHydrated && storedAccountSize > 0) {
+      /* eslint-disable-next-line react-hooks/set-state-in-effect */
+      setAccountSizeText(formatCurrency(storedAccountSize));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasHydrated]);
 
   const accountSize = parseFloat(accountSizeText.replace(/,/g, "")) || 0;
   const valid = positionSizing !== null && accountSize > 0;
@@ -81,6 +107,12 @@ export function RiskStep() {
     RISK_TOLERANCE_OPTIONS[1];
 
   function handleContinue() {
+    // Commit accountSize to the shared store before navigation so the
+    // Risk Rules page (and any other consumer of `riskRules.accountSize`)
+    // reflects what the user just entered. The other onboarding risk
+    // fields aren't persisted yet — they'll be wired up when their own
+    // sections on the Rules & Risk page need them.
+    setAccountSize(accountSize);
     console.log("[onboarding] risk", {
       accountSize,
       riskTolerance,

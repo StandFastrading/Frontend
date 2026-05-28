@@ -1,5 +1,7 @@
 "use client";
 
+import { Info } from "lucide-react";
+
 import {
   Field,
   NumericInput,
@@ -44,6 +46,7 @@ export function AccountRiskSection({
   lastUpdated: string | null;
 }) {
   const symbol = CURRENCY_SYMBOL[value.currency];
+  const accountSizeUnset = value.accountSize <= 0;
   const livePreviewRisk =
     value.accountSize > 0
       ? (value.accountSize * value.baseRiskPerTradePercent) / 100
@@ -58,6 +61,20 @@ export function AccountRiskSection({
         </span>
       }
     >
+      {accountSizeUnset ? (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3">
+          <Info className="mt-0.5 size-4 shrink-0 text-amber-300" />
+          <div className="flex flex-col gap-0.5 leading-tight">
+            <span className="text-sm font-semibold text-amber-200">
+              Account size not set
+            </span>
+            <span className="text-xs text-amber-200/80">
+              Complete onboarding or update your trading profile.
+            </span>
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Current Account Size">
           <NumericInput
@@ -119,24 +136,26 @@ export function AccountRiskSection({
         </Field>
       </div>
 
-      <div className="flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] px-4 py-3">
-        <div className="flex flex-col gap-0.5 leading-tight">
-          <span className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-emerald-300">
-            Live Risk Preview
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {value.baseRiskPerTradePercent.toFixed(2)}% of {symbol}
-            {value.accountSize.toLocaleString("en-US")}
+      {accountSizeUnset ? null : (
+        <div className="flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] px-4 py-3">
+          <div className="flex flex-col gap-0.5 leading-tight">
+            <span className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+              Live Risk Preview
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {value.baseRiskPerTradePercent.toFixed(2)}% of {symbol}
+              {value.accountSize.toLocaleString("en-US")}
+            </span>
+          </div>
+          <span className="text-lg font-semibold tabular-nums text-emerald-300">
+            {symbol}
+            {livePreviewRisk.toLocaleString("en-US", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
           </span>
         </div>
-        <span className="text-lg font-semibold tabular-nums text-emerald-300">
-          {symbol}
-          {livePreviewRisk.toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
-        </span>
-      </div>
+      )}
     </SectionCard>
   );
 }

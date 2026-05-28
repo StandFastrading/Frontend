@@ -10,6 +10,12 @@ import { useAppStore } from "@/store";
 import { ActionButtons } from "@/features/desk/components/action-buttons";
 import { ActiveTradePanel } from "@/features/desk/components/active-trade-panel";
 import { BehaviorFeedPreview } from "@/features/desk/components/behavior-feed-preview";
+// V1 beta: the Live Risk Preview panel is intentionally hidden so we capture
+// the trader's pre-feedback intent before they self-correct share size in
+// response to live risk numbers. The card + its math are still imported and
+// the slice still computes risk — re-mount <RiskPreviewCard /> below when we
+// want to reactivate it. Do not delete the import / file.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { RiskPreviewCard } from "@/features/desk/components/risk-preview-card";
 import { RuleCheckCard } from "@/features/desk/components/rule-check-card";
 import { RuleCheckModal } from "@/features/desk/components/rule-check-modal";
@@ -127,13 +133,23 @@ export function TradeDeskWorkspace() {
       <div className="flex flex-col gap-6">
         <TradePlanCard input={tradeInput} onChange={patchTradeInput} />
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <RiskPreviewCard risk={riskCalc} rules={riskRules} />
-          <RuleCheckCard
-            results={displayedRuleResults}
-            checked={hasCheckedTrade}
-          />
-        </div>
+        {/*
+          V1 beta layout: the Live Risk Preview panel is hidden so the trader
+          can't pre-adjust share size off live risk feedback. The Rule Check
+          card now spans the full width to keep the surface visually balanced
+          (was a 2-col grid with the risk card on the left). Risk numbers
+          surface inside the RuleCheckModal after Check Trade.
+
+          Reactivating: restore the two-column grid + <RiskPreviewCard /> ↓
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <RiskPreviewCard risk={riskCalc} rules={riskRules} />
+            <RuleCheckCard results={displayedRuleResults} checked={hasCheckedTrade} />
+          </div>
+        */}
+        <RuleCheckCard
+          results={displayedRuleResults}
+          checked={hasCheckedTrade}
+        />
 
         <ActionButtons
           onCheckTrade={checkTrade}
@@ -158,9 +174,13 @@ export function TradeDeskWorkspace() {
           if (!next) useAppStore.getState().closeModal();
         }}
         results={modalResults}
+        risk={riskCalc}
+        rules={riskRules}
+        validationStatus={validation?.validationStatus ?? null}
         onContinueAnyway={() => handleIntervention("continue_anyway")}
         onReviseTrade={() => handleIntervention("revise_trade")}
         onCancelTrade={() => handleIntervention("cancel_trade")}
+        onConfirmApproval={() => useAppStore.getState().closeModal()}
       />
     </div>
   );

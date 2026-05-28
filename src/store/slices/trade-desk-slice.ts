@@ -22,6 +22,29 @@ import type { SliceCreator } from "@/store/types";
 // emission, intervention recording, approval → active promotion) is
 // centralized here so the page stays dumb.
 
+// Payload shape logged via `STANDFAST_SUBMITTED_TRADE_INTENT`. Mirrors the
+// pre-revision trader intent plus the risk/rules snapshot computed at
+// submission time so the log line is self-contained for beta analysis.
+export type SubmittedTradeIntent = {
+  tradeInput: TradeInput;
+  riskCalculation: ValidationResult["riskCalculation"];
+  ruleResults: RuleResult[];
+  validationStatus: ValidationResult["validationStatus"];
+  timestamp: string;
+};
+
+// Returns the list of TradeInput field names whose values differ between
+// the original and revised submission. Used in the revision log line so
+// downstream analysis can group "share-size-only revisions" vs. "stop
+// pulled in" vs. "setup changed".
+function diffTradeInputs(
+  original: TradeInput,
+  revised: TradeInput,
+): Array<keyof TradeInput> {
+  const keys = Object.keys(original) as Array<keyof TradeInput>;
+  return keys.filter((k) => original[k] !== revised[k]);
+}
+
 export const EMPTY_TRADE_INPUT: TradeInput = {
   symbol: "",
   marketType: "Stocks",
@@ -51,6 +74,13 @@ export type TradeDeskSlice = {
   // Modal state lives in the slice so the workspace stays presentational.
   modalOpen: boolean;
   modalResults: RuleResult[];
+  // V1 beta behavioral-proof capture: the FIRST trade intent the user
+  // submitted via Check Trade in the current revision chain. Preserved
+  // verbatim across "Revise Trade" so we can diff what the user originally
+  // wanted vs. what they revised to after seeing risk feedback. Cleared on
+  // cancel / mark-active / clear-form / clean continue. NOT persisted —
+  // intentionally ephemeral to the in-flight check.
+  originalSubmittedIntent: TradeInput | null;
   // Append-only validation history — every `checkTrade()` push lands here
   // and persists. Foundation for future per-rule analytics.
   validationHistory: ValidationResult[];
@@ -137,6 +167,7 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
   approvedSnapshot: null,
   modalOpen: false,
   modalResults: [],
+  originalSubmittedIntent: null,
   validationHistory: [],
 
   patchTradeInput: (patch) => {
@@ -146,6 +177,9 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
       // card stops showing stale rule-result statuses next to inputs the
       // user has since changed. The approved snapshot also drops so the
       // "Mark Trade as Active" CTA disappears until the trader re-checks.
+      // `originalSubmittedIntent` is deliberately preserved here — it only
+      // clears on cancel / mark-active / clear-form. The whole point is to
+      // keep the pre-revision intent intact while the trader edits.
       hasCheckedTrade: false,
       approvedSnapshot: null,
     }));
@@ -157,6 +191,7 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
       tradeInput: EMPTY_TRADE_INPUT,
       hasCheckedTrade: false,
       approvedSnapshot: null,
+      originalSubmittedIntent: null,
     }));
     get().recomputeValidation();
   },
@@ -190,10 +225,55 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
     });
     const { tradeInput } = state;
 
+    // V1 beta behavioral capture — log the submitted intent BEFORE the
+    // user sees risk feedback / has a chance to self-correct. On the first
+    // submission in a revision chain we log a single payload; on a
+    // re-check after Revise we log both the original and revised payloads
+    // plus the list of changed fields, so we can quantify how often the
+    // risk modal pushes traders to reshape their plans.
+    const prevOriginal = state.originalSubmittedIntent;
+    const submittedIntent: SubmittedTradeIntent = {
+      tradeInput,
+      riskCalculation: result.riskCalculation,
+      ruleResults: result.ruleResults,
+      validationStatus: result.validationStatus,
+      timestamp: result.timestamp,
+    };
+
+    if (prevOriginal == null) {
+      console.log("STANDFAST_SUBMITTED_TRADE_INTENT", submittedIntent);
+    } else {
+      const revisedPayload: SubmittedTradeIntent = submittedIntent;
+      const originalPayload: SubmittedTradeIntent = {
+        tradeInput: prevOriginal,
+        // Original payload's risk + rules are recomputed against today's
+        // rules/session to keep the comparison apples-to-apples; the
+        // intent itself is what was preserved verbatim.
+        riskCalculation: validateTrade({
+          tradeInput: prevOriginal,
+          riskRules: state.riskRules,
+          sessionMetrics: state.session,
+          behaviorEvents: sessionEvents,
+        }).riskCalculation,
+        ruleResults: [],
+        validationStatus: "approved",
+        timestamp: result.timestamp,
+      };
+      console.log("STANDFAST_SUBMITTED_TRADE_INTENT", {
+        originalSubmittedIntent: originalPayload,
+        revisedSubmittedIntent: revisedPayload,
+        changedFields: diffTradeInputs(prevOriginal, tradeInput),
+      });
+    }
+
     set((state) => ({
       validation: result,
       hasCheckedTrade: true,
       validationHistory: [result, ...state.validationHistory],
+      // Lock in the first submission as the "pre-revision" baseline. Once
+      // set it persists through Revise → edit → re-check and only clears
+      // on cancel / mark-active / clear-form / clean continue.
+      originalSubmittedIntent: prevOriginal ?? tradeInput,
     }));
 
     if (result.canReceiveStandFastApproval) {
@@ -212,7 +292,15 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
         [],
         false,
       );
-      set(() => ({ approvedSnapshot: snapshot }));
+      // Open the modal even on a clean approval so the trader reviews the
+      // risk numbers as part of the approval step — the Live Risk Preview
+      // panel that previously surfaced this is hidden during V1 beta to
+      // avoid contaminating pre-submission behavioral data.
+      set(() => ({
+        approvedSnapshot: snapshot,
+        modalOpen: true,
+        modalResults: result.ruleResults,
+      }));
       return;
     }
 
@@ -275,8 +363,14 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
 
     // Clear the snapshot + checked flag so the CTA disappears and the form
     // returns to "pre-check" state. The trade input itself stays populated
-    // in case the trader wants to journal afterwards.
-    set(() => ({ approvedSnapshot: null, hasCheckedTrade: false }));
+    // in case the trader wants to journal afterwards. The submitted-intent
+    // baseline also clears — the next Check Trade starts a fresh revision
+    // chain.
+    set(() => ({
+      approvedSnapshot: null,
+      hasCheckedTrade: false,
+      originalSubmittedIntent: null,
+    }));
   },
 
   recordInterventionDecision: (decision) => {
@@ -405,14 +499,23 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
     // Continue Anyway leaves the form populated; revise + cancel close the
     // modal but also leave the form so the trader can edit. (Cancel still
     // counts as a meaningful behavioral decision, not just a popup dismiss.)
-    set(() => ({
+    //
+    // `originalSubmittedIntent` clears on cancel + continue (revision chain
+    // terminates) but is preserved on revise — the next Check Trade will
+    // log it alongside the revised intent and the changed-fields diff.
+    set((state) => ({
       modalOpen: false,
       modalResults: [],
       hasCheckedTrade: decision === "continue_anyway",
       approvedSnapshot: nextSnapshot,
+      originalSubmittedIntent:
+        decision === "revise_trade" ? state.originalSubmittedIntent : null,
     }));
   },
 
+  // Approved-path close: the trader reviewed the risk numbers in the
+  // approval modal and dismissed it. The snapshot + checked flag must
+  // persist so the outer "Mark Trade as Active" CTA stays available.
   closeModal: () =>
-    set(() => ({ modalOpen: false, modalResults: [], hasCheckedTrade: false })),
+    set(() => ({ modalOpen: false, modalResults: [] })),
 });

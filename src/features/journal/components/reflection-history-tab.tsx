@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 
 import { REFLECTION_QUESTIONS } from "@/lib/reflection/reflection-engine";
+import { extractThemes } from "@/lib/analytics/reflection-correlation-engine";
 import { useAppStore } from "@/store";
 import { cn } from "@/lib/utils";
 import type { DailyReflection, ReflectionQuestionId } from "@/types";
@@ -242,6 +243,20 @@ function ReflectionHistoryCard({
   onToggle: () => void;
   onDelete: () => void;
 }) {
+  // Theme tags — extracted from the trader's reflection text (answers +
+  // emotional notes + freeform). Surfaced as small chips next to the
+  // top-issue line so the card hints at the language behind the
+  // discipline number without opening the full body. Driven by the
+  // centralized reflection-correlation engine so wording stays
+  // consistent across the analytics surface + the journal.
+  const themeText = useMemo(() => {
+    const answers = Object.values(reflection.answers).join("\n");
+    return [answers, reflection.emotionalNotes, reflection.freeformNotes]
+      .filter((s) => s && s.trim().length > 0)
+      .join("\n");
+  }, [reflection]);
+  const themes = useMemo(() => extractThemes(themeText), [themeText]);
+
   // Top behavioral issue — the dominant signal worth surfacing in the
   // collapsed header. Priority: lockout > escalation cluster > warning
   // override > stop widening > overtrading > clean.
@@ -290,6 +305,23 @@ function ReflectionHistoryCard({
             <span className="text-muted-foreground/60">·</span>
             <span>Focus · {reflection.tomorrowFocus}</span>
           </div>
+          {themes.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {themes.map((t) => (
+                <span
+                  key={t.theme}
+                  className="rounded-full bg-foreground/[0.05] px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.14em] text-foreground/75 ring-1 ring-white/10"
+                  title={`Matched: ${t.matchedKeywords.join(", ")}`}
+                >
+                  {t.label}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-[0.6rem] uppercase tracking-[0.16em] text-muted-foreground/60">
+              No strong theme detected
+            </span>
+          )}
         </div>
         <div className="flex flex-col items-end leading-tight">
           <span

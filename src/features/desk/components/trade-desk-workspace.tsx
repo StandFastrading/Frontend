@@ -19,6 +19,7 @@ import { BehaviorFeedPreview } from "@/features/desk/components/behavior-feed-pr
 import { RiskPreviewCard } from "@/features/desk/components/risk-preview-card";
 import { RuleCheckCard } from "@/features/desk/components/rule-check-card";
 import { RuleCheckModal } from "@/features/desk/components/rule-check-modal";
+import { StartNewSessionButton } from "@/features/desk/components/start-new-session-button";
 import { TradePlanCard } from "@/features/desk/components/trade-plan-card";
 
 // Page is purely presentational — every piece of state and every action
@@ -134,23 +135,20 @@ export function TradeDeskWorkspace() {
         <TradePlanCard input={tradeInput} onChange={patchTradeInput} />
 
         {/*
-          V1 beta layout: the Live Risk Preview panel is hidden so the trader
-          can't pre-adjust share size off live risk feedback. The Rule Check
-          card now spans the full width to keep the surface visually balanced
-          (was a 2-col grid with the risk card on the left). Risk numbers
+          Workflow hierarchy: Trade Plan → Action Buttons → Rule Check.
+          Action buttons sit directly under the form so Check Trade is the
+          first thing the trader sees after entering a plan — the compact
+          Rule Check below is the post-check feedback surface, not a gate
+          the trader has to read past to reach the primary action.
+
+          V1 beta: the Live Risk Preview panel is hidden so the trader
+          can't pre-adjust share size off live risk feedback. Risk numbers
           surface inside the RuleCheckModal after Check Trade.
 
-          Reactivating: restore the two-column grid + <RiskPreviewCard /> ↓
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <RiskPreviewCard risk={riskCalc} rules={riskRules} />
-            <RuleCheckCard results={displayedRuleResults} checked={hasCheckedTrade} />
-          </div>
+          Reactivating Live Risk Preview: mount <RiskPreviewCard risk={riskCalc}
+          rules={riskRules} /> above the rule check (or wrap them in a
+          2-col grid) — the slice still computes risk numbers either way.
         */}
-        <RuleCheckCard
-          results={displayedRuleResults}
-          checked={hasCheckedTrade}
-        />
-
         <ActionButtons
           onCheckTrade={checkTrade}
           onClearForm={clearTradeInput}
@@ -160,7 +158,38 @@ export function TradeDeskWorkspace() {
           onMarkTradeAsActive={handleMarkTradeAsActive}
         />
 
+        <RuleCheckCard
+          results={displayedRuleResults}
+          checked={hasCheckedTrade}
+        />
+
         <ActiveTradePanel />
+
+        {/* Bottom workflow continuation area. Mirrors Start New Session
+            from the page header so traders already scrolled into Active
+            Trade Monitoring don't have to scroll back up. Clear Form is
+            duplicated here for the same reason. */}
+        <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-card/40 p-4 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col leading-tight">
+            <span className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Session Controls
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Reset the session window. Trader, history, and journal are
+              preserved.
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={clearTradeInput}
+              className="flex items-center gap-2 rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Clear Form
+            </button>
+            <StartNewSessionButton variant="primary" />
+          </div>
+        </div>
       </div>
 
       {/* Right rail */}

@@ -1,6 +1,7 @@
 import { ActiveInterventions } from "@/features/dashboard/components/active-interventions";
 import { ActiveRisk } from "@/features/dashboard/components/active-risk";
 import { BehaviorFeed } from "@/features/dashboard/components/behavior-feed";
+import { BehaviorProgress } from "@/features/dashboard/components/behavior-progress";
 import { DashboardHeader } from "@/features/dashboard/components/dashboard-header";
 import { MonitoringStrip } from "@/features/dashboard/components/monitoring-strip";
 import { OpenPositions } from "@/features/dashboard/components/open-positions";
@@ -8,7 +9,9 @@ import { PreSessionChecklist } from "@/features/dashboard/components/pre-session
 import { ReflectionCard } from "@/features/dashboard/components/reflection-card";
 import { RulesRiskStatus } from "@/features/dashboard/components/rules-risk-status";
 import { StatTiles } from "@/features/dashboard/components/stat-tiles";
+import { TodaysObjective } from "@/features/dashboard/components/todays-objective";
 import { TodaysPatterns } from "@/features/dashboard/components/todays-patterns";
+import { WeeklyReview } from "@/features/dashboard/components/weekly-review";
 
 // Vertical rhythm:
 //   gap-5  → between major rows (premium breathing room, tightened from gap-6)
@@ -22,12 +25,19 @@ export default function DashboardPage() {
     <div className="flex flex-col gap-5">
       <DashboardHeader name="Trader" />
 
+      {/* Tier 0 — Action-first surface:
+            1. Today's Objective  — single behavioral focus for the session
+            2. Session State      — the trader's current behavioral state
+            3. Weekly Review      — recent 7-day context
+          The rest of the Dashboard reads as supporting context below. */}
+      <TodaysObjective />
+      <StatTiles />
+      <WeeklyReview />
+      <BehaviorProgress />
+
       <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
         {/* Left / main column */}
         <div className="flex flex-col gap-5">
-          {/* Tier 1 — Dominant behavioral anchor */}
-          <StatTiles />
-
           {/* Tier 2 — Live behavioral monitoring */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr_1fr]">
             <BehaviorFeed />

@@ -78,7 +78,7 @@ function calculateRisk(
   riskRules: RiskRules,
   sessionMetrics: SessionMetrics,
 ): RiskCalculationResult {
-  const { positionSize, direction } = tradeInput;
+  const { positionSize } = tradeInput;
   const entryPrice = parsePrice(tradeInput.entryPrice);
   const stopPrice = parsePrice(tradeInput.stopPrice);
   const targetPrice = parsePrice(tradeInput.targetPrice);
@@ -87,17 +87,24 @@ function calculateRisk(
     return EMPTY_RISK;
   }
 
-  const riskPerShare =
-    direction === "Long" ? entryPrice - stopPrice : stopPrice - entryPrice;
+  // Per-share magnitudes are direction-independent: the trader's
+  // intent already selects Long vs Short, and side validity is a
+  // separate concern from sizing math. Using signed deltas here caused
+  // a clean Long setup (entry 100 / stop 99.5 / target 102) to evaluate
+  // to riskPerShare or rewardPerShare = 0 — and a rewardRiskRatio of
+  // 0.00 : 1 — whenever the persisted `direction` field didn't match
+  // exactly "Long" (whitespace, casing, or a stale wrong-direction
+  // value would silently flip the branches). Taking absolute values
+  // makes the calculation robust to that, matching the user-spec'd
+  // formula: rewardPerShare = abs(target - entry),
+  // riskPerShare = abs(entry - stop).
+  const riskPerShare = Math.abs(entryPrice - stopPrice);
   const totalRisk = riskPerShare * positionSize;
 
   let estimatedReward: number | null = null;
   let rewardRiskRatio: number | null = null;
   if (targetPrice != null) {
-    const rewardPerShare =
-      direction === "Long"
-        ? targetPrice - entryPrice
-        : entryPrice - targetPrice;
+    const rewardPerShare = Math.abs(targetPrice - entryPrice);
     estimatedReward = rewardPerShare * positionSize;
     rewardRiskRatio = riskPerShare > 0 ? rewardPerShare / riskPerShare : null;
   }

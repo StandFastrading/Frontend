@@ -11,18 +11,19 @@ import {
 } from "lucide-react";
 
 import type { ActiveTrade, MarketType } from "@/types";
+import { useCurrentSessionTrades } from "@/lib/sessions/session-helpers";
 import { useAppStore } from "@/store";
 import { cn } from "@/lib/utils";
 
-// Live mirror of the Trade Desk's Active Trade Monitoring system. Reads the
-// raw `activeTrades` slice (no inline filter inside the zustand selector —
-// that would return a new array reference every render and trip
-// `getSnapshot`). The store guarantees this list contains only OPEN trades:
-//   * `logExit` removes the trade in the same set as it archives to
-//     `closedTrades`, so a closed record never lingers here.
-//   * the persist `merge` hook drops any `status: "closed"` record on
-//     hydration as a defensive backstop.
-// Anything `t.status === "active"` is therefore safe to render directly.
+// Live mirror of the Trade Desk's Active Trade Monitoring system. Reads
+// through `useCurrentSessionTrades` so the panel only ever shows trades
+// stamped with the active session id — a Start New Session empties this
+// tile even if a prior session's record is still in the persisted
+// archive. The hook memoizes its return so no array identity churn.
+// Status filter is still applied: the store also guarantees the list
+// contains only OPEN trades (logExit archives to closedTrades; the
+// persist `merge` hook drops any `status: "closed"` record on hydration),
+// so anything `t.status === "active"` is safe to render directly.
 
 function formatR(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -110,7 +111,11 @@ function rTone(r: number | null): string {
 }
 
 export function OpenPositions() {
-  const activeTrades = useAppStore((s) => s.activeTrades);
+  // Session-scoped — mirrors the Trade Desk's Active Trade Monitoring
+  // panel, which now also filters by activeSessionId. A new session
+  // empties this tile until the trader marks something active under
+  // the new session id.
+  const { activeTrades } = useCurrentSessionTrades();
   const accountSize = useAppStore((s) => s.riskRules.accountSize);
 
   const openTrades = activeTrades.filter((t) => t.status === "active");

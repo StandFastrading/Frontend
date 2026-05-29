@@ -1,5 +1,7 @@
 import { Lock, Terminal } from "lucide-react";
 
+import { StartNewSessionButton } from "@/features/desk/components/start-new-session-button";
+
 export function DeskHeader() {
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -40,6 +42,10 @@ export function DeskHeader() {
             </span>
           </div>
         </div>
+
+        {/* DEV / PROTOTYPE — session lifecycle control. Final auth flow
+            will replace this with broker-driven session rotation. */}
+        <StartNewSessionButton variant="primary" />
       </div>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { ArrowRight, ShieldAlert } from "lucide-react";
 
+import { useCurrentSessionTrades } from "@/lib/sessions/session-helpers";
 import { useAppStore } from "@/store";
 import { useSessionIntelligence } from "@/store/slices/session-intelligence-slice";
 import { cn } from "@/lib/utils";
@@ -81,7 +82,10 @@ function formatPnL(value: number): string {
 export function ActiveRisk() {
   const session = useAppStore((s) => s.session);
   const riskRules = useAppStore((s) => s.riskRules);
-  const activeTrades = useAppStore((s) => s.activeTrades);
+  // Session-scoped: "Open Exposure" reflects the current session only —
+  // a Start New Session must reset this tile to zero open risk even if
+  // a prior session's trade is still in the persisted archive.
+  const { activeTrades } = useCurrentSessionTrades();
   const intel = useSessionIntelligence();
 
   const dailyMax = riskRules.maxDailyLossPercent;

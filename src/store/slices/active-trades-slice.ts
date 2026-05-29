@@ -77,18 +77,16 @@ function recalcCurrentRisk(trade: ActiveTrade): {
   if (trade.currentStopPrice == null) {
     return { currentRisk: null, currentRewardRiskRatio: null };
   }
-  const dir = trade.direction;
-  const riskPS =
-    dir === "Long"
-      ? trade.currentAvgEntry - trade.currentStopPrice
-      : trade.currentStopPrice - trade.currentAvgEntry;
+  // Magnitudes only — matches the trade-validation-engine's calculation
+  // contract, so the rule-check, monitoring, and post-activation
+  // surfaces all read from the same shape regardless of direction
+  // representation. Direction-aware checks (stop on the wrong side,
+  // target on the wrong side) belong in the deviation engine.
+  const riskPS = Math.abs(trade.currentAvgEntry - trade.currentStopPrice);
   const currentRisk = riskPS * trade.currentPositionSize;
   let currentRewardRiskRatio: number | null = null;
   if (trade.targetPrice != null && riskPS > 0) {
-    const rewardPS =
-      dir === "Long"
-        ? trade.targetPrice - trade.currentAvgEntry
-        : trade.currentAvgEntry - trade.targetPrice;
+    const rewardPS = Math.abs(trade.targetPrice - trade.currentAvgEntry);
     currentRewardRiskRatio = rewardPS / riskPS;
   }
   return { currentRisk, currentRewardRiskRatio };

@@ -23,6 +23,15 @@ import type {
   InterventionRecommendation,
   MonitoringEvent,
 } from "@/types";
+import {
+  aggregateDeviationsByFamily,
+  summarizeGroupCount,
+  type DeviationFamilyGroup,
+} from "@/lib/monitoring/deviation-aggregation";
+import {
+  useCurrentSessionMonitoringEvents,
+  useCurrentSessionTrades,
+} from "@/lib/sessions/session-helpers";
 import { useAppStore } from "@/store";
 import { cn } from "@/lib/utils";
 import {
@@ -111,12 +120,17 @@ const SEVERITY_LABEL: Record<DeviationSeverity, string> = {
 };
 
 export function ActiveTradePanel() {
-  // Only render the most recent *active* (not closed) trade. Multi-position
-  // monitoring lands when broker integration arrives.
-  const trade = useAppStore(
-    (s) => s.activeTrades.find((t) => t.status === "active") ?? null,
+  // Session-scoped reads — the active trade card and its deviation /
+  // intervention surfaces must never display a record from a prior
+  // session. Records carry sessionId; we filter through the same hooks
+  // session intelligence + the behavior feed already use. Status filter
+  // narrows the current-session set to whatever's still open.
+  const { activeTrades } = useCurrentSessionTrades();
+  const sessionMonitoringEvents = useCurrentSessionMonitoringEvents();
+  const trade = useMemo(
+    () => activeTrades.find((t) => t.status === "active") ?? null,
+    [activeTrades],
   );
-  const monitoringEvents = useAppStore((s) => s.monitoringEvents);
   const moveStop = useAppStore((s) => s.moveStop);
   const addPosition = useAppStore((s) => s.addPosition);
   const markMistake = useAppStore((s) => s.markMistake);
@@ -126,10 +140,15 @@ export function ActiveTradePanel() {
     null,
   );
 
+  // Trade-scoped narrowing. Already session-filtered above; the tradeId
+  // filter keeps the deviation/intervention surfaces tied to the trade
+  // that's actually being shown.
   const events = useMemo(
     () =>
-      trade ? monitoringEvents.filter((e) => e.tradeId === trade.id) : [],
-    [monitoringEvents, trade],
+      trade
+        ? sessionMonitoringEvents.filter((e) => e.tradeId === trade.id)
+        : [],
+    [sessionMonitoringEvents, trade],
   );
 
   if (!trade) return <EmptyState />;
@@ -370,8 +389,15 @@ function ActiveState({
         <RecommendationsBanner recommendations={recommendations} />
       ) : null}
 
-      {/* Deviation event timeline */}
-      {events.length > 0 ? <DeviationTimeline events={events} /> : null}
+      {/* Deviation event timeline — family-aggregated to keep the
+          fatigue protection layer coherent. The raw events stay
+          untouched in the store and in the Trade Detail View; this
+          card collapses consecutive same-family / same-severity
+          events into one evolving group so repeated stop widenings
+          surface as ONE escalating arc, not N stacked cards. */}
+      {events.length > 0 ? (
+        <DeviationTimeline trade={trade} events={events} />
+      ) : null}
 
       {/* Action row */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -527,42 +553,34 @@ function RecommendationsBanner({
   );
 }
 
-function DeviationTimeline({ events }: { events: MonitoringEvent[] }) {
+function DeviationTimeline({
+  trade,
+  events,
+}: {
+  trade: ActiveTrade;
+  events: MonitoringEvent[];
+}) {
+  const groups = useMemo(
+    () => aggregateDeviationsByFamily(trade, events),
+    [trade, events],
+  );
+  if (groups.length === 0) return null;
+
   return (
     <div className="flex flex-col gap-2">
       <span className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
         Deviation Events
       </span>
       <ul className="flex flex-col gap-2">
-        {events.slice(0, 5).map((event) => {
-          const Icon = SEVERITY_ICON[event.severity];
-          const headline =
-            event.deviations[0]?.description ??
-            describeUpdate(event.update);
-          return (
-            <li
-              key={event.id}
-              className={cn(
-                "flex items-start gap-3 rounded-lg ring-1 px-3 py-2.5",
-                SEVERITY_RING[event.severity],
-              )}
-            >
-              <Icon className="mt-0.5 size-4 shrink-0" />
-              <div className="flex flex-1 flex-col gap-0.5 leading-tight">
-                <span className="text-sm font-semibold">{headline}</span>
-                <span className="text-xs opacity-90">
-                  {formatTime(event.timestamp)} · {event.deviations.length}{" "}
-                  deviation{event.deviations.length === 1 ? "" : "s"}
-                </span>
-              </div>
-              <span className="rounded-full bg-foreground/5 px-2 py-0.5 text-[0.55rem] font-semibold uppercase tracking-[0.14em] ring-1 ring-white/10">
-                {SEVERITY_LABEL[event.severity]}
-              </span>
-            </li>
-          );
-        })}
+        {groups.slice(0, 5).map((group) => (
+          <DeviationGroupCard
+            key={group.groupId}
+            group={group}
+            events={events}
+          />
+        ))}
       </ul>
-      {events.length > 5 ? (
+      {groups.length > 5 ? (
         <button
           type="button"
           className="flex items-center gap-1.5 text-xs font-semibold text-brand transition-colors hover:text-brand/80"
@@ -572,6 +590,94 @@ function DeviationTimeline({ events }: { events: MonitoringEvent[] }) {
         </button>
       ) : null}
     </div>
+  );
+}
+
+function DeviationGroupCard({
+  group,
+  events,
+}: {
+  group: DeviationFamilyGroup;
+  events: MonitoringEvent[];
+}) {
+  const Icon = SEVERITY_ICON[group.severity];
+  // Look up the underlying events for the expandable history. The
+  // aggregator preserves chronological event ids, so the history is
+  // ordered exactly the way the trader produced the moves.
+  const groupEvents = useMemo(() => {
+    const map = new Map(events.map((e) => [e.id, e]));
+    return group.eventIds
+      .map((id) => map.get(id))
+      .filter((e): e is MonitoringEvent => e != null);
+  }, [events, group.eventIds]);
+
+  const showProgression =
+    group.riskProgression.firstRiskPerShare != null &&
+    group.riskProgression.latestRiskPerShare != null &&
+    group.riskProgression.firstRiskPerShare !==
+      group.riskProgression.latestRiskPerShare;
+
+  return (
+    <li
+      className={cn(
+        "flex flex-col gap-2 rounded-lg ring-1 px-3 py-2.5",
+        SEVERITY_RING[group.severity],
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <Icon className="mt-0.5 size-4 shrink-0" />
+        <div className="flex flex-1 flex-col gap-0.5 leading-tight">
+          <span className="text-sm font-semibold">
+            {group.familyLabel} active
+          </span>
+          <span className="text-xs opacity-90">
+            {summarizeGroupCount(group)} · last updated{" "}
+            {formatTime(group.latestAt)}
+          </span>
+        </div>
+        <span className="rounded-full bg-foreground/5 px-2 py-0.5 text-[0.55rem] font-semibold uppercase tracking-[0.14em] ring-1 ring-white/10">
+          {SEVERITY_LABEL[group.severity]}
+        </span>
+      </div>
+
+      {showProgression ? (
+        <span className="text-xs opacity-90">
+          Risk/share expanded from{" "}
+          <span className="font-semibold tabular-nums">
+            {group.riskProgression.firstRiskPerShare?.toFixed(2)}
+          </span>{" "}
+          →{" "}
+          <span className="font-semibold tabular-nums">
+            {group.riskProgression.latestRiskPerShare?.toFixed(2)}
+          </span>
+        </span>
+      ) : null}
+
+      <span className="text-xs opacity-80">
+        Latest change · {group.latestHeadline}
+      </span>
+
+      {group.eventCount > 1 ? (
+        <details className="group">
+          <summary className="flex cursor-pointer items-center gap-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground/80">
+            <ArrowRight className="size-3 transition-transform group-open:rotate-90" />
+            View {group.eventCount} step
+            {group.eventCount === 1 ? "" : "s"}
+          </summary>
+          <ul className="mt-1.5 flex flex-col gap-1 pl-4 text-[0.7rem] text-muted-foreground">
+            {groupEvents.map((e) => (
+              <li key={e.id} className="flex items-start gap-2">
+                <span className="tabular-nums">{formatTime(e.timestamp)}</span>
+                <span className="opacity-80">·</span>
+                <span className="flex-1 opacity-90">
+                  {e.deviations[0]?.description ?? describeUpdate(e.update)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </li>
   );
 }
 

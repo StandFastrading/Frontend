@@ -15,9 +15,16 @@ import { BehavioralProfileHeader } from "@/features/analytics/components/behavio
 import { BehavioralTrendCharts } from "@/features/analytics/components/behavioral-trend-charts";
 import { DisciplineStabilitySection } from "@/features/analytics/components/discipline-stability-section";
 import { InsightsFeedSection } from "@/features/analytics/components/insights-feed-section";
+import { AdaptiveInterventionSection } from "@/features/analytics/components/adaptive-intervention-section";
+import { BehaviorProgressSection } from "@/features/analytics/components/behavior-progress-section";
 import { InterventionEffectivenessSection } from "@/features/analytics/components/intervention-effectiveness-section";
+import { InterventionFatigueSection } from "@/features/analytics/components/intervention-fatigue-section";
+import { InterventionOutcomesSection } from "@/features/analytics/components/intervention-outcomes-section";
 import { PatternClustersSection } from "@/features/analytics/components/pattern-clusters-section";
+import { ReflectionCorrelationsSection } from "@/features/analytics/components/reflection-correlations-section";
 import { SessionReplaySection } from "@/features/analytics/components/session-replay-section";
+import { TodaysObjectiveSection } from "@/features/analytics/components/todays-objective-section";
+import { WeeklyReviewSection } from "@/features/analytics/components/weekly-review-section";
 
 // Behavioral Analytics — composed shell.
 //
@@ -41,11 +48,18 @@ export function AnalyticsPage() {
       <div className="flex flex-col gap-6">
         <AnalyticsHeader />
         <BehavioralProfileHeader />
+        <TodaysObjectiveSection />
+        <WeeklyReviewSection />
+        <BehaviorProgressSection />
         <BehavioralTrendCharts />
         <PatternClustersSection />
         <BehavioralPatternsSection />
+        <InterventionOutcomesSection />
+        <ReflectionCorrelationsSection />
         <DisciplineStabilitySection />
         <InterventionEffectivenessSection />
+        <AdaptiveInterventionSection />
+        <InterventionFatigueSection />
         <SessionReplaySection />
         <InsightsFeedSection />
       </div>

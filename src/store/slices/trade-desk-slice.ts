@@ -1,5 +1,6 @@
 import { BEHAVIOR_EVENT_TYPES } from "@/lib/behavior-events";
 import type { BehaviorEventType } from "@/lib/behavior-events";
+import { deriveCurrentAccountBalance } from "@/lib/sessions/account-balance";
 import { getCurrentSessionEvents } from "@/lib/sessions/session-helpers";
 import {
   parsePrice,
@@ -21,6 +22,58 @@ import type { SliceCreator } from "@/store/types";
 // run, and the rule-check modal state. Business logic (validateTrade, event
 // emission, intervention recording, approval → active promotion) is
 // centralized here so the page stays dumb.
+//
+// =============================================================================
+// Trade Lifecycle (StandFast contract — masterspine note)
+// =============================================================================
+//
+// StandFast separates trade-planning behavior from executed trade records.
+// A trade plan is NOT a trade until activation. This protects analytics
+// integrity while preserving useful behavioral signals from evaluations,
+// revisions, cancellations, and abandoned plans.
+//
+// Each state is enforced by where the data lives — not by a `status` field
+// on a shared record. The store layout itself IS the lifecycle guarantee:
+//
+//   Draft       — `tradeInput` is non-empty, `hasCheckedTrade === false`.
+//                 Lives only on the trade-desk slice. No behavior event,
+//                 no persisted trade record.
+//
+//   Evaluated   — `hasCheckedTrade === true`. Check Trade fired the rule
+//                 engine and emitted TRADE_APPROVED. Still no persisted
+//                 trade record; only an in-memory `approvedSnapshot`.
+//
+//   Revised     — Trader clicked Revise Trade in the rule-check modal.
+//                 Emits TRADE_REVISED behavior event. `approvedSnapshot`
+//                 cleared. NO trade record created. Multiple revisions
+//                 against the same plan are allowed.
+//
+//   Abandoned   — Trader clicked Clear Form AFTER evaluation. Emits
+//                 PLAN_ABANDONED behavior event. NO trade record. A
+//                 pre-evaluation clear is a silent reset (no event).
+//
+//   Canceled    — Trader chose Cancel Trade in the rule-check modal.
+//                 Emits TRADE_AVOIDED behavior event. NO trade record.
+//
+//   Activated   — Trader clicked Mark Trade as Active on an
+//                 `approvedSnapshot`. `appendActiveTrade()` writes a
+//                 row to `activeTrades`. Emits TRADE_MARKED_ACTIVE.
+//                 First state where a persistent trade record exists.
+//
+//   Closed      — `logExit()` builds a ClosedTrade record from the
+//                 ActiveTrade and atomically moves it: removed from
+//                 `activeTrades`, prepended to `closedTrades`. Emits
+//                 TRADE_CLOSED. Sole source of `closedTrades` entries.
+//
+// Reads that count "trades":
+//   - Trade History / Reports / Calendar / Dashboard P/L Today — read
+//     ONLY from `closedTrades` (the archive). Plan/evaluation/revision/
+//     cancel/abandon never appear here.
+//   - Dashboard Active Positions — reads `activeTrades.filter(t => t.status === "active")`.
+//   - Behavior Analytics — may consume Evaluated/Revised/Canceled/Abandoned
+//     behavior events as intervention signals, but must NOT count them
+//     as executed trades.
+// =============================================================================
 
 // Payload shape logged via `STANDFAST_SUBMITTED_TRADE_INTENT`. Mirrors the
 // pre-revision trader intent plus the risk/rules snapshot computed at
@@ -187,6 +240,27 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
   },
 
   clearTradeInput: () => {
+    // Emit PLAN_ABANDONED only when the trader cleared AFTER evaluation.
+    // A pre-evaluation clear is a silent reset — nothing of behavioral
+    // value occurred yet. This is the "Abandoned" lifecycle marker.
+    const hadEvaluation = get().hasCheckedTrade;
+    if (hadEvaluation) {
+      const event = buildBehaviorEvent({
+        input: get().tradeInput,
+        results: [],
+        risk: get().validation?.riskCalculation ?? {
+          riskPerShare: null,
+          totalRisk: null,
+          estimatedReward: null,
+          rewardRiskRatio: null,
+          accountRiskPercent: null,
+          projectedDailyRiskPercent: null,
+        },
+        eventType: BEHAVIOR_EVENT_TYPES.PLAN_ABANDONED,
+      });
+      get().appendBehaviorEvent(event);
+    }
+
     set(() => ({
       tradeInput: EMPTY_TRADE_INPUT,
       hasCheckedTrade: false,
@@ -202,11 +276,20 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
     // inflate today's projected daily risk or any future analytics-aware
     // check the engine runs.
     const sessionEvents = getCurrentSessionEvents(state);
+    // Next-trade risk % is computed against the trader's Current Balance
+    // (Starting Balance + Realized P/L Today), not the static account
+    // size. Daily-loss cap math still anchors to Starting Balance and
+    // lives elsewhere (see logExit in active-trades-slice).
+    const currentAccountBalance = deriveCurrentAccountBalance(
+      state.riskRules.accountSize,
+      state.closedTrades,
+    );
     const result = validateTrade({
       tradeInput: state.tradeInput,
       riskRules: state.riskRules,
       sessionMetrics: state.session,
       behaviorEvents: sessionEvents,
+      currentAccountBalance,
     });
     set(() => ({ validation: result }));
   },
@@ -217,11 +300,16 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
     // in between input change and click.
     const state = get();
     const sessionEvents = getCurrentSessionEvents(state);
+    const currentAccountBalance = deriveCurrentAccountBalance(
+      state.riskRules.accountSize,
+      state.closedTrades,
+    );
     const result = validateTrade({
       tradeInput: state.tradeInput,
       riskRules: state.riskRules,
       sessionMetrics: state.session,
       behaviorEvents: sessionEvents,
+      currentAccountBalance,
     });
     const { tradeInput } = state;
 
@@ -254,6 +342,7 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
           riskRules: state.riskRules,
           sessionMetrics: state.session,
           behaviorEvents: sessionEvents,
+          currentAccountBalance,
         }).riskCalculation,
         ruleResults: [],
         validationStatus: "approved",
@@ -341,7 +430,35 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
       status: "active",
       source: "manual_confirmation",
     };
+    if (process.env.NODE_ENV === "development") {
+      const pre = get();
+      console.log("[debug:activate] markTradeAsActive · pre-append", {
+        builtTradeId: trade.id,
+        builtTradeStatus: trade.status,
+        builtTradeSessionId: trade.sessionId ?? null,
+        approvedSnapshotPresent: pre.approvedSnapshot != null,
+        approvedSnapshotStatus: pre.approvedSnapshot?.approvalStatus ?? null,
+        stateActiveSessionId: pre.activeSessionId,
+        stateSessionsCount: pre.sessions.length,
+        stateActiveTradesCount: pre.activeTrades.length,
+      });
+    }
+
     get().appendActiveTrade(trade);
+
+    if (process.env.NODE_ENV === "development") {
+      const post = get();
+      const persisted = post.activeTrades.find((t) => t.id === trade.id);
+      console.log("[debug:activate] markTradeAsActive · post-append", {
+        builtTradeId: trade.id,
+        persistedFound: persisted != null,
+        persistedStatus: persisted?.status,
+        persistedSessionId: persisted?.sessionId ?? null,
+        persistedTradingDate: persisted?.tradingDate ?? null,
+        stateActiveSessionId: post.activeSessionId,
+        activeTradesCount: post.activeTrades.length,
+      });
+    }
 
     // Log the manual confirmation so analytics can correlate "approved →
     // entered" rates. Display strings come from the centralized vocabulary

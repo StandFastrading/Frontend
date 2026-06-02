@@ -82,7 +82,7 @@ export const ADAPTIVE_SEVERITY_LABEL: Record<AdaptiveSeverityLevel, string> = {
   passive: "Passive",
   standard: "Standard",
   elevated: "Elevated",
-  high_pressure: "High Pressure",
+  high_pressure: "High Risk",
   critical: "Critical",
 };
 
@@ -106,7 +106,7 @@ export type BehavioralTrustLevel =
 export const BEHAVIORAL_TRUST_LABEL: Record<BehavioralTrustLevel, string> = {
   stable: "Stable",
   caution: "Caution",
-  high_pressure: "High Pressure",
+  high_pressure: "High Risk",
   critical: "Critical",
 };
 

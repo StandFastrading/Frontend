@@ -14,10 +14,10 @@ import { cn } from "@/lib/utils";
 // never visually impersonates a strong one.
 
 const FRAME: Record<PatternSeverity, string> = {
-  info: "border-emerald-500/25 bg-emerald-500/[0.04]",
-  caution: "border-amber-500/25 bg-amber-500/[0.04]",
-  warning: "border-rose-500/30 bg-rose-500/[0.05]",
-  critical: "border-rose-500/45 bg-rose-500/[0.08]",
+  info: "border-emerald-500/40 bg-gradient-to-br from-emerald-500/[0.10] to-emerald-500/[0.02] shadow-[0_0_30px_-12px_rgba(16,185,129,0.45)]",
+  caution: "border-amber-500/45 bg-gradient-to-br from-amber-500/[0.12] to-amber-500/[0.02] shadow-[0_0_30px_-12px_rgba(245,158,11,0.45)]",
+  warning: "border-rose-500/45 bg-gradient-to-br from-rose-500/[0.13] to-rose-500/[0.03] shadow-[0_0_32px_-12px_rgba(244,63,94,0.5)]",
+  critical: "border-rose-500/60 bg-gradient-to-br from-rose-500/[0.18] to-rose-500/[0.04] shadow-[0_0_36px_-10px_rgba(244,63,94,0.6)]",
 };
 
 const SEVERITY_LABEL: Record<PatternSeverity, string> = {
@@ -34,10 +34,10 @@ const SEVERITY_TEXT: Record<PatternSeverity, string> = {
   critical: "text-rose-200",
 };
 
-const CONFIDENCE_TONE: Record<PatternConfidence, string> = {
-  low: "text-muted-foreground bg-foreground/[0.05] ring-white/10",
-  moderate: "text-foreground/85 bg-foreground/[0.08] ring-white/15",
-  high: "text-emerald-300/95 bg-emerald-500/10 ring-emerald-500/25",
+const CONFIDENCE_TEXT: Record<PatternConfidence, string> = {
+  low: "text-muted-foreground/85",
+  moderate: "text-foreground",
+  high: "text-emerald-300 drop-shadow-[0_0_8px_rgba(16,185,129,0.55)]",
 };
 
 function formatRelative(iso: string | undefined): string {
@@ -61,35 +61,33 @@ export function PatternCard({ pattern }: { pattern: BehavioralPattern }) {
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1 leading-tight">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={cn(
-                "text-[0.55rem] font-semibold uppercase tracking-[0.22em]",
-                SEVERITY_TEXT[pattern.severity],
-              )}
-            >
+        <div className="flex flex-col gap-1.5 leading-tight">
+          <h4
+            className={cn(
+              "font-semibold text-foreground",
+              pattern.category === "time_of_day"
+                ? "text-sm uppercase tracking-[0.14em]"
+                : "text-base",
+            )}
+          >
+            {pattern.title}
+          </h4>
+          <div className="flex flex-wrap items-center gap-1.5 text-[0.7rem] font-medium">
+            <span className={SEVERITY_TEXT[pattern.severity]}>
               {SEVERITY_LABEL[pattern.severity]}
             </span>
-            <span
-              className={cn(
-                "rounded-full px-1.5 py-0.5 text-[0.55rem] font-semibold uppercase tracking-[0.14em] ring-1",
-                CONFIDENCE_TONE[pattern.confidence],
-              )}
-            >
+            <span className="text-muted-foreground/60">•</span>
+            <span className={CONFIDENCE_TEXT[pattern.confidence]}>
               {PATTERN_CONFIDENCE_LABEL[pattern.confidence]}
             </span>
           </div>
-          <h4 className="text-base font-semibold text-foreground">
-            {pattern.title}
-          </h4>
         </div>
         <div className="flex flex-col items-end leading-tight">
           <span className="text-2xl font-semibold tabular-nums text-foreground">
             {pattern.occurrenceCount}
           </span>
           <span className="text-[0.55rem] uppercase tracking-[0.18em] text-muted-foreground/80">
-            occurrences
+            Occurrences
           </span>
         </div>
       </div>

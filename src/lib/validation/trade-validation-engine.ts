@@ -73,10 +73,18 @@ export function parsePrice(value: string): number | null {
 // Manual-mode, stocks-style risk calculation. Per-market handlers (options,
 // futures, forex, crypto) will branch on `tradeInput.marketType` here once
 // those flows are wired up.
+//
+// `accountBalanceForRisk` is the divisor used for the next-trade
+// `accountRiskPercent`. Callers pass the trader's **current** balance
+// (Starting Balance + Realized P/L Today) so the percentage reflects
+// what the trader actually has at hand. When null (legacy / test
+// callers), the divisor falls back to `riskRules.accountSize` so the
+// engine remains backwards-compatible.
 function calculateRisk(
   tradeInput: TradeInput,
   riskRules: RiskRules,
   sessionMetrics: SessionMetrics,
+  accountBalanceForRisk: number | null,
 ): RiskCalculationResult {
   const { positionSize } = tradeInput;
   const entryPrice = parsePrice(tradeInput.entryPrice);
@@ -109,10 +117,14 @@ function calculateRisk(
     rewardRiskRatio = riskPerShare > 0 ? rewardPerShare / riskPerShare : null;
   }
 
+  // Use the caller-supplied current balance when provided; fall back to
+  // the starting balance for legacy callers that didn't compute one.
+  const balanceForRisk =
+    accountBalanceForRisk != null && accountBalanceForRisk > 0
+      ? accountBalanceForRisk
+      : riskRules.accountSize;
   const accountRiskPercent =
-    riskRules.accountSize > 0
-      ? (totalRisk / riskRules.accountSize) * 100
-      : null;
+    balanceForRisk > 0 ? (totalRisk / balanceForRisk) * 100 : null;
 
   const projectedDailyRiskPercent =
     accountRiskPercent != null
@@ -137,11 +149,23 @@ export type ValidateTradeArgs = {
   // consecutive-loss counts from TRADE_EXITED metadata). Today the engine
   // treats sessionMetrics as authoritative for those counters.
   behaviorEvents: BehaviorEvent[];
+  // Current Balance (Starting Balance + Realized P/L Today). Used as
+  // the divisor for the next-trade risk percentage so the number the
+  // trader sees reflects what they actually have to risk. Optional for
+  // backwards compatibility — when omitted/null, the engine falls back
+  // to `riskRules.accountSize` (Starting Balance only).
+  currentAccountBalance?: number | null;
 };
 
 export function validateTrade(args: ValidateTradeArgs): ValidationResult {
-  const { tradeInput, riskRules, sessionMetrics } = args;
-  const risk = calculateRisk(tradeInput, riskRules, sessionMetrics);
+  const { tradeInput, riskRules, sessionMetrics, currentAccountBalance } =
+    args;
+  const risk = calculateRisk(
+    tradeInput,
+    riskRules,
+    sessionMetrics,
+    currentAccountBalance ?? null,
+  );
 
   const stopMissing = parsePrice(tradeInput.stopPrice) == null;
   const planLength = tradeInput.tradePlan.trim().length;

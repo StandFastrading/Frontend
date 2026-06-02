@@ -208,7 +208,7 @@ function TrustLevelCard({
   return (
     <CardShell
       icon={ShieldCheck}
-      title="Behavioral Trust Level"
+      title="Mental State"
       caveat="Calibrated from recorded events only. Not a personality label."
       ringClass={tone.ring}
     >

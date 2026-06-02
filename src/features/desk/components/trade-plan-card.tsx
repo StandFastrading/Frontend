@@ -86,8 +86,8 @@ export function TradePlanCard({ input, onChange }: Props) {
               const active = input.direction === d;
               const activeClasses =
                 d === "Long"
-                  ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300"
-                  : "border-rose-500/50 bg-rose-500/15 text-rose-300";
+                  ? "border-emerald-500/65 bg-emerald-500/20 text-emerald-200 shadow-[0_0_18px_-4px_rgba(16,185,129,0.55)]"
+                  : "border-rose-500/65 bg-rose-500/20 text-rose-200 shadow-[0_0_18px_-4px_rgba(244,63,94,0.55)]";
               return (
                 <button
                   key={d}

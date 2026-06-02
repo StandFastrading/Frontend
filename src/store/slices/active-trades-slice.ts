@@ -1,5 +1,6 @@
 import { BEHAVIOR_EVENT_TYPES } from "@/lib/behavior-events";
 import { detectDeviations } from "@/lib/monitoring/behavior-deviation-engine";
+import { deriveCurrentAccountBalance } from "@/lib/sessions/account-balance";
 import { stampWithActiveSession } from "@/lib/sessions/session-stamp";
 import type {
   ActiveTrade,
@@ -7,6 +8,7 @@ import type {
   ActiveTradeUpdate,
   BehaviorEvent,
   ClosedTrade,
+  ExitReason,
   MonitoringEvent,
 } from "@/types";
 import type { SliceCreator } from "@/store/types";
@@ -47,7 +49,9 @@ export type ActiveTradesSlice = {
     tradeId: string,
     exitPrice: number,
     outcome: ActiveTradeExitOutcome,
-    reflection?: string,
+    reflection: string | undefined,
+    exitReason: ExitReason,
+    exitNotes: string | undefined,
   ) => void;
 };
 
@@ -178,9 +182,34 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
   return {
     activeTrades: [],
     appendActiveTrade: (trade) =>
-      set((state) => ({
-        activeTrades: [stampWithActiveSession(state, trade), ...state.activeTrades],
-      })),
+      set((state) => {
+        const stamped = stampWithActiveSession(state, trade);
+        if (process.env.NODE_ENV === "development") {
+          console.log("[debug:activate] appendActiveTrade", {
+            inputTradeId: trade.id,
+            inputStatus: trade.status,
+            inputSessionId: trade.sessionId ?? null,
+            inputTradingDate: trade.tradingDate ?? null,
+            stateActiveSessionId: state.activeSessionId,
+            sessionsCount: state.sessions.length,
+            stateSessionIds: state.sessions.map((s) => ({
+              id: s.sessionId,
+              status: s.status,
+              tradingDate: s.tradingDate,
+            })),
+            stampedSessionId: stamped.sessionId ?? null,
+            stampedTradingDate: stamped.tradingDate ?? null,
+            stampedStatus: stamped.status,
+            stampApplied:
+              (stamped.sessionId ?? null) !== (trade.sessionId ?? null),
+            activeTradesBefore: state.activeTrades.length,
+            activeTradesAfter: state.activeTrades.length + 1,
+          });
+        }
+        return {
+          activeTrades: [stamped, ...state.activeTrades],
+        };
+      }),
     removeActiveTrade: (id) =>
       set((state) => ({
         activeTrades: state.activeTrades.filter((t) => t.id !== id),
@@ -193,12 +222,19 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
       recordUpdate(trade, { type: "move_stop", newStopPrice });
       const mutated: ActiveTrade = { ...trade, currentStopPrice: newStopPrice };
       const recalc = recalcCurrentRisk(mutated);
+      // Risk % uses Current Balance (Starting + Realized P/L Today) so
+      // the trader sees the true exposure-to-capital ratio after any
+      // realized P/L on closed trades earlier today.
+      const balance = deriveCurrentAccountBalance(
+        get().riskRules.accountSize,
+        get().closedTrades,
+      );
       replaceTrade({
         ...mutated,
         currentRisk: recalc.currentRisk,
         currentAccountRiskPercent:
-          recalc.currentRisk != null && get().riskRules.accountSize > 0
-            ? (recalc.currentRisk / get().riskRules.accountSize) * 100
+          recalc.currentRisk != null && balance > 0
+            ? (recalc.currentRisk / balance) * 100
             : mutated.currentAccountRiskPercent,
         currentRewardRiskRatio: recalc.currentRewardRiskRatio,
       });
@@ -223,12 +259,16 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
         currentAvgEntry: newAvgEntry,
       };
       const recalc = recalcCurrentRisk(mutated);
+      const balance = deriveCurrentAccountBalance(
+        get().riskRules.accountSize,
+        get().closedTrades,
+      );
       replaceTrade({
         ...mutated,
         currentRisk: recalc.currentRisk,
         currentAccountRiskPercent:
-          recalc.currentRisk != null && get().riskRules.accountSize > 0
-            ? (recalc.currentRisk / get().riskRules.accountSize) * 100
+          recalc.currentRisk != null && balance > 0
+            ? (recalc.currentRisk / balance) * 100
             : mutated.currentAccountRiskPercent,
         currentRewardRiskRatio: recalc.currentRewardRiskRatio,
       });
@@ -244,12 +284,16 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
         currentPositionSize: newSize,
       };
       const recalc = recalcCurrentRisk(mutated);
+      const balance = deriveCurrentAccountBalance(
+        get().riskRules.accountSize,
+        get().closedTrades,
+      );
       replaceTrade({
         ...mutated,
         currentRisk: recalc.currentRisk,
         currentAccountRiskPercent:
-          recalc.currentRisk != null && get().riskRules.accountSize > 0
-            ? (recalc.currentRisk / get().riskRules.accountSize) * 100
+          recalc.currentRisk != null && balance > 0
+            ? (recalc.currentRisk / balance) * 100
             : mutated.currentAccountRiskPercent,
         currentRewardRiskRatio: recalc.currentRewardRiskRatio,
       });
@@ -271,7 +315,14 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
     // description tuned per outcome), optionally emits a reflection event,
     // archives the trade into closedTrades, removes it from activeTrades,
     // and updates session counters so dashboard metrics reflect the change.
-    logExit: (tradeId, exitPrice, outcome, reflection) => {
+    logExit: (
+      tradeId,
+      exitPrice,
+      outcome,
+      reflection,
+      exitReason,
+      exitNotes,
+    ) => {
       const trade = get().activeTrades.find((t) => t.id === tradeId);
       if (!trade) return;
 
@@ -301,6 +352,31 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
 
       const closedAt = new Date().toISOString();
       const note = reflection?.trim() ?? "";
+      const trimmedExitNotes = exitNotes?.trim() ?? "";
+
+      // Risk-reduction attribution — only computed for the explicit
+      // "Manual Exit - Risk Reduction" path AND only when the trade
+      // actually closed at a loss AND a baseline original risk exists.
+      // The amount/percent compare actual realized loss against the
+      // originally-planned loss (`originalRisk`), so a smaller realized
+      // loss earns a positive defensive attribution. Wins, breakevens,
+      // and override activations with a null stop short-circuit to null.
+      let lossReduced: boolean | null = null;
+      let lossReductionAmount: number | null = null;
+      let lossReductionPercent: number | null = null;
+      if (
+        exitReason === "manual_exit_risk_reduction" &&
+        outcome === "loss" &&
+        trade.originalRisk != null &&
+        trade.originalRisk > 0
+      ) {
+        const plannedLoss = trade.originalRisk;
+        const actualLoss = Math.abs(realizedPnL);
+        const saved = plannedLoss - actualLoss;
+        lossReduced = saved > 0;
+        lossReductionAmount = saved > 0 ? saved : 0;
+        lossReductionPercent = saved > 0 ? saved / plannedLoss : 0;
+      }
 
       // Build the normalized archive record. Closed-trade deviation +
       // mistake counts come from the monitoring history for this trade
@@ -332,6 +408,11 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
         deviationCount,
         mistakeCount,
         exitReflection: note.length > 0 ? note : null,
+        exitReason,
+        exitNotes: trimmedExitNotes.length > 0 ? trimmedExitNotes : null,
+        lossReduced,
+        lossReductionAmount,
+        lossReductionPercent,
         approvedAt: trade.approvedAt,
         activatedAt: trade.activatedAt,
         closedAt,

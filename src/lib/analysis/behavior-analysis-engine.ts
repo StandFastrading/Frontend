@@ -264,6 +264,19 @@ export type BehaviorAnalysisResult = {
   // score, so the trader can be informed BEFORE the score has tanked.
   escalationDetected: boolean;
   escalationReasons: string[];
+  // Per-trade escalation attribution — populated when the per-trade reason
+  // fires (>=3 deviations within one trade). Lets dashboard surfaces show
+  // the offending trade's top deviation types and link directly to its
+  // Trade Detail View. `null` when escalation was triggered by a
+  // session-wide reason (warning stacking, override conditioning) but no
+  // single trade crossed the per-trade threshold.
+  escalationPerTradeSource: {
+    tradeId: string;
+    deviationCount: number;
+    // Deviation `type` strings sorted by occurrence, highest first.
+    // Surfaces map these to short user-facing chip labels.
+    deviationTypes: string[];
+  } | null;
   // Raw counts surfaced so dashboard surfaces (and future Reports) can read
   // the same numbers the score derives from. Skipping a separate "stats"
   // hook keeps both surfaces aligned.
@@ -304,10 +317,31 @@ const DRIVER_LABELS: Record<BehaviorScoringKey, (n: number) => string> = {
 // =============================================================================
 
 function countWarningIgnored(events: BehaviorEvent[]): number {
-  // Any Continue Anyway decision counts. Both warning-only overrides
-  // (TRADE_OVERRIDE_ACCEPTED) and fail-overrides (WARNING_IGNORED) carry
-  // `decision: "continue_anyway"`.
-  return events.filter((e) => e.decision === "continue_anyway").length;
+  // Count ONLY hard-limit overrides — events where the trader pushed
+  // past a FAIL-status rule via Continue Anyway. Advisory cautions
+  // (status === "warning", no FAIL rules) ride the
+  // TRADE_OVERRIDE_ACCEPTED event type and must NOT inflate this metric.
+  //
+  // Semantic rule:
+  //   wasOverridden && (ruleViolated || event is a hard_limit override)
+  //
+  // Translated to the persisted schema:
+  //   wasOverridden       = e.decision === "continue_anyway"
+  //   ruleViolated        = any triggeredRule.status === "fail"
+  //   hard_limit override = e.eventType === WARNING_IGNORED
+  //
+  // The two right-hand conditions are functionally redundant given how
+  // recordInterventionDecision routes events today (WARNING_IGNORED
+  // only fires when a fail rule was present), but both branches are
+  // kept so the filter stays correct if either emission path widens.
+  return events.filter((e) => {
+    const wasOverridden = e.decision === "continue_anyway";
+    if (!wasOverridden) return false;
+    const ruleViolated = e.triggeredRules.some((r) => r.status === "fail");
+    const isHardLimitOverride =
+      e.eventType === BEHAVIOR_EVENT_TYPES.WARNING_IGNORED;
+    return ruleViolated || isHardLimitOverride;
+  }).length;
 }
 
 function countTradeActivatedWithWarnings(
@@ -661,7 +695,11 @@ function detectEscalation(
   counts: Record<BehaviorScoringKey, number>,
   closedTrades: ClosedTrade[],
   monitoringEvents: MonitoringEvent[],
-): { detected: boolean; reasons: string[] } {
+): {
+  detected: boolean;
+  reasons: string[];
+  perTradeSource: BehaviorAnalysisResult["escalationPerTradeSource"];
+} {
   const reasons: string[] = [];
 
   if (counts.warning_ignored >= 2) {
@@ -683,25 +721,59 @@ function detectEscalation(
 
   // Per-trade deviation stack — counts across both active monitoring and
   // archived closed trades so escalation surfaces during the live trade,
-  // not only after it closes.
+  // not only after it closes. Track per-type counts alongside the totals
+  // so the dashboard banner can attribute the escalation to its top
+  // deviation types without re-scanning the events.
   const deviationsByTrade = new Map<string, number>();
+  const typeCountsByTrade = new Map<string, Map<string, number>>();
   for (const event of monitoringEvents) {
     deviationsByTrade.set(
       event.tradeId,
       (deviationsByTrade.get(event.tradeId) ?? 0) + event.deviations.length,
     );
+    let typeCounts = typeCountsByTrade.get(event.tradeId);
+    if (!typeCounts) {
+      typeCounts = new Map();
+      typeCountsByTrade.set(event.tradeId, typeCounts);
+    }
+    for (const d of event.deviations) {
+      typeCounts.set(d.type, (typeCounts.get(d.type) ?? 0) + 1);
+    }
   }
   for (const t of closedTrades) {
     if (t.deviationCount > (deviationsByTrade.get(t.id) ?? 0)) {
       deviationsByTrade.set(t.id, t.deviationCount);
     }
   }
-  const maxPerTrade = Math.max(0, ...deviationsByTrade.values());
+
+  let perTradeSource: BehaviorAnalysisResult["escalationPerTradeSource"] =
+    null;
+  let topTradeId: string | null = null;
+  let maxPerTrade = 0;
+  for (const [id, n] of deviationsByTrade) {
+    if (n > maxPerTrade) {
+      maxPerTrade = n;
+      topTradeId = id;
+    }
+  }
   if (maxPerTrade >= 3) {
     reasons.push(`${maxPerTrade} deviations within a single trade`);
+    if (topTradeId) {
+      const typeCounts = typeCountsByTrade.get(topTradeId);
+      const deviationTypes = typeCounts
+        ? [...typeCounts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .map(([type]) => type)
+        : [];
+      perTradeSource = {
+        tradeId: topTradeId,
+        deviationCount: maxPerTrade,
+        deviationTypes,
+      };
+    }
   }
 
-  return { detected: reasons.length > 0, reasons };
+  return { detected: reasons.length > 0, reasons, perTradeSource };
 }
 
 // =============================================================================
@@ -792,6 +864,7 @@ export function computeBehaviorAnalysis(
     keyDrivers,
     escalationDetected: escalation.detected,
     escalationReasons: escalation.reasons,
+    escalationPerTradeSource: escalation.perTradeSource,
     counts,
   };
 }

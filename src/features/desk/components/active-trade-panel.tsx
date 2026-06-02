@@ -131,6 +131,36 @@ export function ActiveTradePanel() {
     () => activeTrades.find((t) => t.status === "active") ?? null,
     [activeTrades],
   );
+
+  // Temporary diagnostic — surfaces the exact session-scoped read the panel
+  // sees on each render so we can correlate it with the activation-side
+  // logs in trade-desk-slice / active-trades-slice. Remove once the
+  // post-activate visibility bug is closed.
+  if (process.env.NODE_ENV === "development") {
+    const rawActiveTrades = useAppStore.getState().activeTrades;
+    const rawActiveSessionId = useAppStore.getState().activeSessionId;
+    console.log("[debug:activate] ActiveTradePanel render", {
+      hookActiveTradesCount: activeTrades.length,
+      hookActiveTrades: activeTrades.map((t) => ({
+        id: t.id,
+        status: t.status,
+        sessionId: t.sessionId ?? null,
+        tradingDate: t.tradingDate ?? null,
+      })),
+      foundActiveTrade: trade != null,
+      foundTradeId: trade?.id ?? null,
+      foundTradeStatus: trade?.status ?? null,
+      rawStoreActiveTradesCount: rawActiveTrades.length,
+      rawStoreActiveTrades: rawActiveTrades.map((t) => ({
+        id: t.id,
+        status: t.status,
+        sessionId: t.sessionId ?? null,
+        tradingDate: t.tradingDate ?? null,
+      })),
+      rawStoreActiveSessionId: rawActiveSessionId,
+      willRender: trade ? "ActiveState" : "EmptyState",
+    });
+  }
   const moveStop = useAppStore((s) => s.moveStop);
   const addPosition = useAppStore((s) => s.addPosition);
   const markMistake = useAppStore((s) => s.markMistake);
@@ -179,6 +209,8 @@ export function ActiveTradePanel() {
           payload.exitPrice,
           payload.outcome,
           payload.reflection,
+          payload.exitReason,
+          payload.exitNotes,
         );
         // Outcome-specific toast so the feedback reads like the headline
         // behavior event ("Winning trade closed" etc.).

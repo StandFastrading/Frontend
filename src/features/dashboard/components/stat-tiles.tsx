@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { ArrowRight, Brain, Lock, TriangleAlert } from "lucide-react";
 
 import { useBehaviorAnalysis } from "@/lib/analysis/behavior-analysis-engine";
@@ -11,8 +12,10 @@ import {
   type BehavioralStateTone,
   type DisciplineBand,
 } from "@/lib/state/behavioral-state-aggregator";
+import { useCurrentSessionTrades } from "@/lib/sessions/session-helpers";
 import { useSessionIntelligence } from "@/store/slices/session-intelligence-slice";
 import { cn } from "@/lib/utils";
+import { TradeDetailView } from "@/features/journal/components/trade-detail-view";
 
 // =============================================================================
 // Behavioral Command Center anchor.
@@ -44,51 +47,58 @@ type StateChrome = {
 // classifies each state into one of these tones; we then map tone to a
 // concrete palette. Keeping the indirection here means a future palette
 // shift only touches this file, not the engine.
-const TONE_CHROME: Record<BehavioralStateTone, StateChrome> = {
+type StateChromeWithGlow = StateChrome & { glow: string };
+
+const TONE_CHROME: Record<BehavioralStateTone, StateChromeWithGlow> = {
   stable: {
-    icon: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40",
+    icon: "bg-emerald-500/20 text-emerald-200 ring-emerald-500/50 shadow-[0_0_24px_-6px_rgba(16,185,129,0.55)]",
     text: "text-emerald-300",
     label: "",
-    halo: "from-emerald-500/[0.06] via-emerald-500/[0.02] to-transparent",
-    border: "border-emerald-500/25",
-    panelBg: "bg-emerald-500/[0.03]",
+    halo: "from-emerald-500/[0.12] via-emerald-500/[0.04] to-transparent",
+    border: "border-emerald-500/40",
+    panelBg: "bg-emerald-500/[0.05]",
     accent: "bg-emerald-400",
+    glow: "shadow-[0_0_60px_-20px_rgba(16,185,129,0.35)]",
   },
   watchful: {
-    icon: "bg-brand/15 text-brand ring-brand/40",
+    icon: "bg-brand/20 text-brand ring-brand/55 shadow-[0_0_24px_-6px_oklch(0.62_0.22_255/0.55)]",
     text: "text-brand",
     label: "",
-    halo: "from-brand/[0.05] via-brand/[0.02] to-transparent",
-    border: "border-brand/25",
-    panelBg: "bg-brand/[0.03]",
+    halo: "from-brand/[0.10] via-brand/[0.04] to-transparent",
+    border: "border-brand/40",
+    panelBg: "bg-brand/[0.05]",
     accent: "bg-brand",
+    glow: "shadow-[0_0_60px_-20px_oklch(0.62_0.22_255/0.35)]",
   },
   elevated: {
-    icon: "bg-amber-500/15 text-amber-300 ring-amber-500/40",
+    icon: "bg-amber-500/20 text-amber-200 ring-amber-500/55 shadow-[0_0_24px_-6px_rgba(245,158,11,0.55)]",
     text: "text-amber-300",
     label: "",
-    halo: "from-amber-500/[0.07] via-amber-500/[0.02] to-transparent",
-    border: "border-amber-500/30",
-    panelBg: "bg-amber-500/[0.03]",
+    halo: "from-amber-500/[0.14] via-amber-500/[0.04] to-transparent",
+    border: "border-amber-500/45",
+    panelBg: "bg-amber-500/[0.05]",
     accent: "bg-amber-400",
+    glow: "shadow-[0_0_60px_-20px_rgba(245,158,11,0.4)]",
   },
   critical: {
-    icon: "bg-rose-500/15 text-rose-300 ring-rose-500/40",
+    icon: "bg-rose-500/20 text-rose-200 ring-rose-500/55 shadow-[0_0_28px_-6px_rgba(244,63,94,0.6)]",
     text: "text-rose-300",
     label: "",
-    halo: "from-rose-500/[0.08] via-rose-500/[0.02] to-transparent",
-    border: "border-rose-500/35",
-    panelBg: "bg-rose-500/[0.04]",
+    halo: "from-rose-500/[0.16] via-rose-500/[0.05] to-transparent",
+    border: "border-rose-500/50",
+    panelBg: "bg-rose-500/[0.06]",
     accent: "bg-rose-400",
+    glow: "shadow-[0_0_60px_-20px_rgba(244,63,94,0.45)]",
   },
   lockdown: {
-    icon: "bg-rose-500/20 text-rose-200 ring-rose-500/60",
+    icon: "bg-rose-500/30 text-rose-100 ring-rose-500/70 shadow-[0_0_32px_-4px_rgba(244,63,94,0.7)]",
     text: "text-rose-200",
     label: "",
-    halo: "from-rose-500/[0.12] via-rose-500/[0.03] to-transparent",
-    border: "border-rose-500/45",
-    panelBg: "bg-rose-500/[0.05]",
+    halo: "from-rose-500/[0.22] via-rose-500/[0.06] to-transparent",
+    border: "border-rose-500/60",
+    panelBg: "bg-rose-500/[0.08]",
     accent: "bg-rose-300",
+    glow: "shadow-[0_0_70px_-15px_rgba(244,63,94,0.55)]",
   },
 };
 
@@ -119,6 +129,26 @@ const STATE_TONE: Record<BehavioralStateLabel, BehavioralStateTone> = {
   fatigued: "critical",
   locked_down: "lockdown",
 };
+
+// Short user-facing label per deviation type. Used by the escalation
+// banner to surface the offending trade's top 2–3 deviations as inline
+// chips. Wire identifiers persist; this map only governs display copy.
+const DEVIATION_CHIP_LABEL: Record<string, string> = {
+  stop_moved_further: "Stop widened",
+  stop_tightened: "Stop tightened",
+  position_size_increased: "Size increased",
+  averaging_down: "Averaging down",
+  reward_risk_degraded: "Risk adjusted",
+  excessive_adds: "Added position",
+  risk_exposure_increased: "Risk increased",
+  behavioral_mistake_logged: "Mistake logged",
+  rapid_post_loss_reactivation: "Rapid re-entry",
+  oversized_exposure_increase: "Oversized exposure",
+};
+
+function chipLabelFor(deviationType: string): string {
+  return DEVIATION_CHIP_LABEL[deviationType] ?? deviationType;
+}
 
 // Discipline band → subtitle color. Mirrors the band semantics: exceptional
 // + controlled read positive (emerald), unstable amber, degrading + critical
@@ -211,6 +241,23 @@ export function StatTiles() {
   const analysis = useBehaviorAnalysis();
   const intel = useSessionIntelligence();
   const aggregation = useBehavioralStateAggregation();
+  const { closedTrades } = useCurrentSessionTrades();
+  const [tradeDetailOpen, setTradeDetailOpen] = useState(false);
+
+  // Resolve the offending trade to a ClosedTrade record so the popup can
+  // render the existing Trade Detail View. If escalation came from an
+  // active (not-yet-closed) trade, the View Trade button hides — we
+  // don't synthesize a parallel detail surface.
+  const escalationTrade = useMemo(() => {
+    const source = analysis.escalationPerTradeSource;
+    if (!source) return null;
+    return closedTrades.find((t) => t.id === source.tradeId) ?? null;
+  }, [analysis.escalationPerTradeSource, closedTrades]);
+
+  const escalationChips = useMemo(() => {
+    const types = analysis.escalationPerTradeSource?.deviationTypes ?? [];
+    return types.slice(0, 3).map(chipLabelFor);
+  }, [analysis.escalationPerTradeSource]);
 
   const tone = STATE_TONE[aggregation.state];
   const chrome = TONE_CHROME[tone];
@@ -237,22 +284,33 @@ export function StatTiles() {
     analysis.counts.warning_ignored === 0 ? "emerald" : "rose";
 
   // Banner copy — prefers the aggregator's floor reason when an active
-  // pattern is holding the state up, otherwise falls back to the analysis
-  // engine's pattern-escalation reasons.
-  const banner = aggregation.floorApplied
+  // pattern is holding the state up. Escalation has two presentations:
+  // the rich per-trade variant (chips + deviation count + View Trade)
+  // when a single trade crossed the deviation threshold, otherwise the
+  // session-wide fallback that prints the first reason as body copy.
+  const perTradeSource = analysis.escalationPerTradeSource;
+  const banner: {
+    title: string;
+    body?: string;
+    variant: "floor" | "per_trade" | "session";
+  } | null = aggregation.floorApplied
     ? {
+        variant: "floor",
         title: "Behavioral floor active",
         body:
           aggregation.floorReason ??
           "Active behavioral patterns are holding the session state above its score band.",
       }
     : analysis.escalationDetected
-      ? {
-          title: "Escalation pattern detected",
-          body:
-            analysis.escalationReasons[0] ??
-            "Repeated behavioral signals indicate compounding risk.",
-        }
+      ? perTradeSource
+        ? { variant: "per_trade", title: "Escalation Pattern Detected" }
+        : {
+            variant: "session",
+            title: "Escalation Pattern Detected",
+            body:
+              analysis.escalationReasons[0] ??
+              "Repeated behavioral signals indicate compounding risk.",
+          }
       : null;
 
   return (
@@ -261,6 +319,7 @@ export function StatTiles() {
       className={cn(
         "relative overflow-hidden rounded-2xl border bg-card/60 backdrop-blur",
         chrome.border,
+        chrome.glow,
       )}
     >
       {/* Subtle directional halo — pulls the eye to the state label without
@@ -433,21 +492,53 @@ export function StatTiles() {
         {/* Behavioral alert banner — prefers the aggregator's detection
             floor reason (the active pattern that is contradicting the
             score band), falls back to the analysis engine's older
-            escalation reasons. */}
+            escalation reasons. The per-trade escalation variant surfaces
+            up to three deviation chips and a View Trade button that
+            opens the existing Trade Detail View modal. */}
         {banner ? (
           <div className="flex items-start gap-3 rounded-lg border border-rose-500/30 bg-rose-500/[0.06] px-4 py-3">
             <TriangleAlert className="mt-0.5 size-4 shrink-0 text-rose-300" />
-            <div className="flex flex-col gap-0.5 leading-tight">
+            <div className="flex flex-1 flex-col gap-1.5 leading-tight">
               <span className="text-sm font-semibold text-rose-200">
                 {banner.title}
               </span>
-              <span className="text-xs leading-relaxed text-rose-200/80">
-                {banner.body}
-              </span>
+              {banner.variant === "per_trade" && perTradeSource ? (
+                <>
+                  {escalationChips.length > 0 ? (
+                    <span className="text-xs leading-relaxed text-rose-200/80">
+                      {escalationChips.join(" • ")}
+                    </span>
+                  ) : null}
+                  <span className="text-xs leading-relaxed text-rose-200/70">
+                    {perTradeSource.deviationCount} deviations within a single
+                    trade
+                  </span>
+                  {escalationTrade ? (
+                    <button
+                      type="button"
+                      onClick={() => setTradeDetailOpen(true)}
+                      className="mt-1 inline-flex w-fit items-center gap-1 rounded-md border border-rose-500/40 bg-rose-500/10 px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-rose-100 transition-colors hover:bg-rose-500/20"
+                    >
+                      View Trade
+                      <ArrowRight className="size-3" />
+                    </button>
+                  ) : null}
+                </>
+              ) : (
+                <span className="text-xs leading-relaxed text-rose-200/80">
+                  {banner.body}
+                </span>
+              )}
             </div>
           </div>
         ) : null}
       </div>
+
+      <TradeDetailView
+        trade={escalationTrade}
+        open={tradeDetailOpen && escalationTrade != null}
+        onOpenChange={setTradeDetailOpen}
+      />
     </section>
   );
 }

@@ -163,7 +163,7 @@ export function computeInsightsFeed(
       insights.push({
         id: "early_session_unstable",
         headline:
-          "Early-session deterioration is common — patterns appear within the first two trades.",
+          "Discipline drift is common — patterns appear within the first two trades.",
         trace: `${earlyDeteriorationSessions} of ${earlyTradeSessions} sessions produced deterioration within 30 min of the first two activations (${100 - cleanRate}%).`,
         severity: "warning",
         confidence,

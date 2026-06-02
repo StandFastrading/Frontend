@@ -2,6 +2,7 @@
 
 import { ArrowRight, ShieldAlert } from "lucide-react";
 
+import { deriveCurrentAccountBalance } from "@/lib/sessions/account-balance";
 import { useCurrentSessionTrades } from "@/lib/sessions/session-helpers";
 import { useAppStore } from "@/store";
 import { useSessionIntelligence } from "@/store/slices/session-intelligence-slice";
@@ -98,10 +99,16 @@ export function ActiveRisk() {
   const openRiskDollars = activeTrades
     .filter((t) => t.status === "active")
     .reduce((sum, t) => sum + (t.currentRisk ?? t.originalRisk ?? 0), 0);
+  // Open exposure % reflects the trader's open risk against the money
+  // they actually have to trade against right now — Current Balance,
+  // not Starting Balance. Same anchor the Trade Desk validator uses.
+  const closedTrades = useAppStore((s) => s.closedTrades);
+  const currentBalance = deriveCurrentAccountBalance(
+    riskRules.accountSize,
+    closedTrades,
+  );
   const openRiskPercent =
-    riskRules.accountSize > 0
-      ? (openRiskDollars / riskRules.accountSize) * 100
-      : 0;
+    currentBalance > 0 ? (openRiskDollars / currentBalance) * 100 : 0;
 
   // Floors at 0 so we never display a negative slack number when the cap
   // has been exceeded — the breach label below makes the state clear.

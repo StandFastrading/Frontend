@@ -385,7 +385,7 @@ function buildEarlySessionRecord(input: {
     {
       ...input,
       behaviorType: "early_session_deterioration",
-      behaviorLabel: "Early-Session Deterioration",
+      behaviorLabel: "Discipline Drift",
       directionPreference: "lower" as const,
       currentSessionCount: input.currentSessions.length,
       previousSessionCount: input.previousSessions.length,

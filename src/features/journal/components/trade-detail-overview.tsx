@@ -1,7 +1,7 @@
-import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ShieldCheck } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import type { ClosedTrade } from "@/types";
+import { EXIT_REASON_LABEL, type ClosedTrade } from "@/types";
 
 // SECTION 1 — Trade Overview
 //
@@ -150,6 +150,56 @@ export function TradeDetailOverview({ trade }: { trade: ClosedTrade }) {
           {formatPnL(trade.realizedPnL)}
         </span>
       </div>
+
+      {/* Exit Reason — structured pick captured at Log Exit. Older
+          archive rows pre-date the field; hidden when null so they
+          render unchanged. */}
+      {trade.exitReason ? (
+        <div className="mt-3 flex flex-col gap-1.5 border-t border-white/5 pt-3">
+          <span className="text-[0.55rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
+            Exit Reason
+          </span>
+          <span className="text-sm font-medium text-foreground">
+            {EXIT_REASON_LABEL[trade.exitReason]}
+          </span>
+          {trade.exitNotes && trade.exitNotes.trim().length > 0 ? (
+            <p className="text-xs leading-relaxed text-foreground/80">
+              {trade.exitNotes}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Risk reduction attribution — only rendered when logExit
+          computed savings against the originally-planned stop. Shows
+          the planned-vs-actual diff so the trader sees the concrete
+          defensive win, not just an abstract "good behavior" tag. */}
+      {trade.lossReduced &&
+      trade.lossReductionAmount != null &&
+      trade.lossReductionPercent != null ? (
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-500/35 bg-emerald-500/[0.06] p-3 shadow-[0_0_24px_-10px_rgba(16,185,129,0.55)]">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/35">
+            <ShieldCheck className="size-4" />
+          </span>
+          <div className="flex flex-col gap-0.5 leading-tight">
+            <span className="text-[0.55rem] font-semibold uppercase tracking-[0.18em] text-emerald-300/90">
+              Risk Reduction
+            </span>
+            <span className="text-sm text-foreground/90">
+              Loss reduced by{" "}
+              <span className="font-semibold tabular-nums text-emerald-300">
+                {Math.round(trade.lossReductionPercent * 100)}%
+              </span>{" "}
+              ({"-$"}
+              {trade.lossReductionAmount.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}{" "}
+              saved) compared to the planned stop.
+            </span>
+          </div>
+        </div>
+      ) : null}
 
       {/* Inline exit reflection — the in-the-moment thought captured at
           close. Distinct from the structured Trade Reflection below it. */}

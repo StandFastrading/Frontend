@@ -30,6 +30,13 @@ export const BEHAVIOR_EVENT_TYPES = {
   TRADE_REVISION_STARTED: "trade_revision_started",
   TRADE_REVISED: "trade_revised",
   TRADE_AVOIDED: "trade_avoided",
+  // Emitted when the trader clears the form AFTER having evaluated the
+  // plan (Check Trade ran). A pre-evaluation clear is a silent reset —
+  // no event — because nothing of behavioral value has happened yet.
+  // PLAN_ABANDONED is a positive behavioral signal: the trader evaluated
+  // and chose not to proceed. Distinct from TRADE_AVOIDED, which is
+  // dispatched from the rule-check modal's Cancel Trade path.
+  PLAN_ABANDONED: "plan_abandoned",
   TRADE_APPROVED: "trade_approved",
   TRADE_MARKED_ACTIVE: "trade_marked_active",
   // Granular active-trade monitoring vocabulary. Behavior Deviation Engine
@@ -119,6 +126,13 @@ export const BEHAVIOR_EVENT_DISPLAY: Record<
   [BEHAVIOR_EVENT_TYPES.TRADE_AVOIDED]: {
     displayTitle: "Trade avoided",
     displayDescription: "Trader canceled the setup after intervention.",
+    tone: "emerald",
+    icon: Ban,
+  },
+  [BEHAVIOR_EVENT_TYPES.PLAN_ABANDONED]: {
+    displayTitle: "Plan abandoned",
+    displayDescription:
+      "Trader cleared the form after evaluation without activating the trade.",
     tone: "emerald",
     icon: Ban,
   },

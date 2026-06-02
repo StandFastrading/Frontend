@@ -23,6 +23,7 @@ import type {
 } from "@/features/rules-risk/types";
 import type { RiskRules } from "@/types";
 import { getDefaultRiskRules } from "@/types";
+import { deriveRealizedPnLToday } from "@/lib/sessions/account-balance";
 import { useAppStore } from "@/store";
 
 // Section components still consume the legacy nested sub-shapes. The canonical
@@ -158,6 +159,15 @@ export function RulesRiskWorkspace() {
   const saved = useAppStore((s) => s.riskRules);
   const hasHydrated = useAppStore((s) => s._hasHydrated);
   const persistRules = useAppStore((s) => s.saveRiskRules);
+  // Realized P/L from trades closed today — drives the Current Balance
+  // derivation surfaced on the Account & Risk card. Source of truth is
+  // the closed-trades archive; recomputed on read so the card always
+  // matches what `pnLToday` shows on the dashboard.
+  const closedTrades = useAppStore((s) => s.closedTrades);
+  const realizedPnLToday = useMemo(
+    () => deriveRealizedPnLToday(closedTrades),
+    [closedTrades],
+  );
 
   const [draft, setDraft] = useState<RiskRules>(saved);
 
@@ -202,6 +212,7 @@ export function RulesRiskWorkspace() {
             value={toAccount(draft)}
             onChange={(p) => patch(fromAccount(p))}
             lastUpdated={saved.updatedAt}
+            realizedPnLToday={realizedPnLToday}
           />
           <PerTradeRulesSection
             value={toPerTrade(draft)}

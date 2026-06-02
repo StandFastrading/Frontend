@@ -1,12 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as Lucide from "lucide-react";
-import { ArrowRight, ChevronUp, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowRight, ChevronUp, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,7 +29,8 @@ import {
   clearAllMockData,
   clearMockSession,
 } from "@/features/auth/mock-session";
-import { useAppStore } from "@/store";
+import { factoryResetTestData } from "@/lib/storage";
+import { resetAppState, useAppStore } from "@/store";
 import { cn } from "@/lib/utils";
 
 const iconMap = Lucide as unknown as Record<
@@ -35,6 +43,7 @@ export function Sidebar({ email }: { email: string }) {
   const router = useRouter();
   const initials = (email || "ST").slice(0, 2).toUpperCase();
   const resetTodaysSession = useAppStore((s) => s.resetTodaysSession);
+  const [factoryResetOpen, setFactoryResetOpen] = useState(false);
 
   // Sign-out: clears the mock session cookie only. Onboarded flag is kept so
   // returning users go straight to /dashboard after their next sign-in. When
@@ -81,6 +90,41 @@ export function Sidebar({ email }: { email: string }) {
     router.refresh();
   };
 
+  // Dev-only: factory reset for test data. Unlike Reset Demo Data, this
+  // preserves the mock-auth + mock-onboarded cookies — so the trader
+  // stays signed in and lands on /dashboard rather than getting bounced
+  // through onboarding again. Sweeps every localStorage key under the
+  // `sf_` prefix (broader than the enumerated ALL_SF_STORAGE_KEYS), then
+  // resets the in-memory zustand state so the dashboard re-renders
+  // empty without waiting for a full page reload.
+  const handleFactoryReset = () => {
+    const removed = factoryResetTestData();
+    // Reset the in-memory store too — `factoryResetTestData` only
+    // touches localStorage, but the zustand module is a long-lived
+    // singleton holding the same data in memory. Without this, the
+    // dashboard would keep showing the cached trades until the next
+    // hard reload.
+    resetAppState();
+    // Re-bootstrap a session-for-today. `resetAppState` resets the
+    // store to its initial defaults (`activeSessionId: null`,
+    // `sessions: []`), and the boundary-system callback that normally
+    // opens a session only runs inside `onRehydrateStorage` — NOT
+    // after a manual setState. Without this call, the next activation
+    // would build a trade that `stampWithActiveSession` can't stamp,
+    // so Active Trade Monitoring would render its empty state forever.
+    useAppStore.getState().ensureSessionForToday();
+    console.log(
+      `[factory-reset] cleared ${removed.length} localStorage key${
+        removed.length === 1 ? "" : "s"
+      }:`,
+      removed,
+    );
+    toast.success("Factory reset complete — all test data cleared");
+    setFactoryResetOpen(false);
+    router.replace(ROUTES.dashboard);
+    router.refresh();
+  };
+
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-border/60 bg-card/40 p-4 pb-14 backdrop-blur md:flex">
       {/* Brand */}
@@ -88,8 +132,8 @@ export function Sidebar({ email }: { email: string }) {
         href={ROUTES.home}
         className="mb-6 flex items-center gap-2.5 px-2"
       >
-        <span className="flex size-9 items-center justify-center rounded-lg bg-brand/15 text-brand ring-1 ring-brand/30">
-          <ShieldCheck className="size-5" />
+        <span className="flex size-9 items-center justify-center rounded-lg bg-brand/20 text-brand ring-1 ring-brand/45 shadow-[0_0_18px_-4px_oklch(0.62_0.22_255/0.55)]">
+          <ShieldCheck className="size-5 drop-shadow-[0_0_6px_oklch(0.62_0.22_255/0.55)]" />
         </span>
         <div className="flex flex-col leading-none">
           <span className="text-sm font-bold uppercase tracking-wider text-foreground">
@@ -115,7 +159,7 @@ export function Sidebar({ email }: { email: string }) {
               className={cn(
                 "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
                 isActive
-                  ? "bg-brand/15 text-brand ring-1 ring-brand/30"
+                  ? "bg-gradient-to-r from-brand/25 to-brand/10 text-brand ring-1 ring-brand/45 shadow-[0_0_20px_-6px_oklch(0.62_0.22_255/0.55)]"
                   : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
               )}
             >
@@ -193,8 +237,59 @@ export function Sidebar({ email }: { email: string }) {
           >
             Reset Demo Data
           </DropdownMenuItem>
+          {/* [TEMPORARY · DEV-ONLY] Factory reset for test data. Preserves
+              auth + onboarded cookies so the trader stays on /dashboard
+              instead of getting routed through onboarding again. Routes
+              the destructive action through a real Dialog because the
+              wipe is irreversible — `window.confirm` doesn't carry
+              enough visual weight for this case. */}
+          <DropdownMenuItem
+            onClick={() => setFactoryResetOpen(true)}
+            className="text-rose-400 focus:text-rose-300"
+          >
+            DEV · Factory Reset Test Data
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <Dialog open={factoryResetOpen} onOpenChange={setFactoryResetOpen}>
+        <DialogContent
+          showCloseButton={false}
+          className="dark flex max-w-md flex-col gap-5 border border-rose-500/40 bg-card/95 p-5 text-foreground shadow-[0_0_60px_-15px_rgba(244,63,94,0.45)] sm:max-w-md"
+        >
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/40 shadow-[0_0_18px_-4px_rgba(244,63,94,0.55)]">
+              <AlertTriangle className="size-5" />
+            </span>
+            <div className="flex flex-col gap-1">
+              <DialogTitle className="text-base font-semibold text-foreground">
+                Factory Reset Test Data
+              </DialogTitle>
+              <DialogDescription className="text-xs leading-relaxed text-muted-foreground">
+                Factory Reset Test Data will permanently delete all local
+                testing trades, behavior events, journal entries, reports,
+                calendar records, and analytics. This cannot be undone.
+              </DialogDescription>
+            </div>
+          </div>
+          <div className="-mx-5 -mb-5 flex items-center justify-end gap-2 rounded-b-xl border-t border-white/10 bg-background/30 px-4 py-3">
+            <button
+              type="button"
+              onClick={() => setFactoryResetOpen(false)}
+              className="rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleFactoryReset}
+              className="rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-rose-950 transition-colors hover:bg-rose-500/90"
+            >
+              Factory Reset
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </aside>
   );
 }

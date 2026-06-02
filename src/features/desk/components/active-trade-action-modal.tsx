@@ -11,7 +11,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { ActiveTrade, ActiveTradeExitOutcome } from "@/types";
+import {
+  EXIT_REASONS,
+  EXIT_REASON_LABEL,
+  type ActiveTrade,
+  type ActiveTradeExitOutcome,
+  type ExitReason,
+} from "@/types";
 import { cn } from "@/lib/utils";
 
 // Unified modal for the four Active Trade Monitoring workflows. The page
@@ -38,6 +44,8 @@ export type ActiveTradeActionSubmit =
       exitPrice: number;
       outcome: ActiveTradeExitOutcome;
       reflection: string;
+      exitReason: ExitReason;
+      exitNotes: string;
     };
 
 type Props = {
@@ -356,6 +364,16 @@ function MarkMistakeBody({
   );
 }
 
+// Default exit reason per outcome. Pre-selects the reason that matches
+// the trader's outcome pick, so a clean win/loss flow needs zero extra
+// clicks. Manual exits (risk reduction, profit protection, etc.) require
+// the trader to deliberately reselect — that's the point.
+const DEFAULT_REASON_BY_OUTCOME: Record<ActiveTradeExitOutcome, ExitReason> = {
+  win: "target_hit",
+  loss: "stop_loss_hit",
+  breakeven: "other",
+};
+
 function LogExitBody({
   trade,
   onSubmit,
@@ -368,6 +386,10 @@ function LogExitBody({
   const [price, setPrice] = useState("");
   const [outcome, setOutcome] = useState<ActiveTradeExitOutcome>("win");
   const [reflection, setReflection] = useState("");
+  const [exitReason, setExitReason] = useState<ExitReason>(
+    DEFAULT_REASON_BY_OUTCOME.win,
+  );
+  const [exitNotes, setExitNotes] = useState("");
   const priceNum = parseNumber(price);
 
   return (
@@ -381,6 +403,8 @@ function LogExitBody({
           exitPrice: priceNum,
           outcome,
           reflection,
+          exitReason,
+          exitNotes,
         });
       }}
     >
@@ -413,7 +437,18 @@ function LogExitBody({
               <button
                 key={o}
                 type="button"
-                onClick={() => setOutcome(o)}
+                onClick={() => {
+                  setOutcome(o);
+                  // Auto-suggest the matching exit reason — trader can
+                  // override. Only nudges when the current pick still
+                  // matches the OLD default (i.e., they haven't already
+                  // chosen a manual exit reason on purpose).
+                  setExitReason((prev) =>
+                    prev === DEFAULT_REASON_BY_OUTCOME[outcome]
+                      ? DEFAULT_REASON_BY_OUTCOME[o]
+                      : prev,
+                  );
+                }}
                 className={cn(
                   "rounded-lg border px-3 py-1.5 text-sm font-semibold capitalize transition-colors",
                   active
@@ -426,6 +461,34 @@ function LogExitBody({
             );
           })}
         </div>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Exit Reason
+        </Label>
+        <select
+          value={exitReason}
+          onChange={(e) => setExitReason(e.target.value as ExitReason)}
+          className="rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+        >
+          {EXIT_REASONS.map((r) => (
+            <option key={r} value={r} className="bg-card text-foreground">
+              {EXIT_REASON_LABEL[r]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Exit Notes (optional)
+        </Label>
+        <textarea
+          value={exitNotes}
+          onChange={(e) => setExitNotes(e.target.value)}
+          rows={2}
+          placeholder='e.g. "Cut loss early when price failed to reclaim VWAP."'
+          className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+        />
       </div>
       <div className="flex flex-col gap-1.5">
         <Label className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">

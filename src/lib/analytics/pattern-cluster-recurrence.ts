@@ -206,10 +206,10 @@ export type BehaviorClusterFormation = {
 // -----------------------------------------------------------------------------
 
 const FORMATION_TITLE: Record<BehaviorFormationType, string> = {
-  stop_discipline: "Stop Discipline Cluster",
-  risk_mutation: "Risk Mutation Pattern",
-  early_session_deterioration: "Early-Session Deterioration",
-  clean_to_decay: "Clean Start, Discipline Decay",
+  stop_discipline: "Stop Loss Widening Pattern",
+  risk_mutation: "Risk Adjustment Pattern",
+  early_session_deterioration: "Discipline Drift",
+  clean_to_decay: "Clean Start, Weak Finish",
   rule_defiance: "Rule Boundary Drift",
 };
 

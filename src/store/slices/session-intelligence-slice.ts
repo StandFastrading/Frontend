@@ -169,9 +169,20 @@ export function computeSessionIntelligence(
   const totalWarningsTriggered = behaviorEvents.filter(
     (e) => e.eventType === BEHAVIOR_EVENT_TYPES.WARNING_TRIGGERED,
   ).length;
-  const totalWarningsIgnored = behaviorEvents.filter(
-    (e) => e.decision === "continue_anyway",
-  ).length;
+  // Count ONLY hard-limit overrides — events where the trader pushed
+  // past a FAIL-status rule via Continue Anyway. Advisory cautions
+  // (status === "warning", no FAIL rules) ride the
+  // TRADE_OVERRIDE_ACCEPTED event type and must NOT inflate this metric.
+  // Mirrors the rule in countWarningIgnored (behavior-analysis-engine)
+  // so both surfaces agree on the definition of "warnings ignored."
+  const totalWarningsIgnored = behaviorEvents.filter((e) => {
+    const wasOverridden = e.decision === "continue_anyway";
+    if (!wasOverridden) return false;
+    const ruleViolated = e.triggeredRules.some((r) => r.status === "fail");
+    const isHardLimitOverride =
+      e.eventType === BEHAVIOR_EVENT_TYPES.WARNING_IGNORED;
+    return ruleViolated || isHardLimitOverride;
+  }).length;
   const totalInterventionsTriggered = interventions.length;
   const totalRuleViolations = validationHistory.filter(
     (v) => v.validationStatus === "violation",
@@ -210,18 +221,43 @@ export function computeSessionIntelligence(
     totalApprovedTrades * 2;
   const disciplineScore = Math.max(0, Math.min(100, rawDiscipline));
 
-  const ruleCheckTotal = behaviorEvents.filter((e) =>
-    ["approved", "continue_anyway", "cancel_trade", "revise_trade"].includes(
-      e.decision ?? "",
-    ),
+  // Rules Followed — anchored to committed trade records, NOT to
+  // behavior-event decisions. Drafts, evaluations, revisions, cancels,
+  // and abandoned plans never produce a trade record, so they're
+  // naturally excluded from both numerator and denominator. The prior
+  // implementation read from the decision stream, which counted every
+  // Check / Revise / Cancel / Continue-Anyway as a "rule opportunity"
+  // — inflating the denominator for traders who revised their plan
+  // before activating.
+  //
+  // Denominator: every committed trade (open + closed).
+  // Numerator: trades that respected the rules end-to-end —
+  //   * Closed: zero deviations and zero mistakes during the trade
+  //     (the same fields the deviation engine populated at archive).
+  //   * Open: clean approval pathway (not a warning override), no
+  //     mistake flag yet, no deviations recorded in monitoring events
+  //     for the trade so far. Flips to not-followed if any of those
+  //     three signals appear later.
+  const cleanClosedTrades = closedTrades.filter(
+    (t) => t.deviationCount === 0 && t.mistakeCount === 0,
   ).length;
+  const cleanOpenTrades = activeOpen.filter((t) => {
+    if (t.approvalStatus === "approved_with_warnings") return false;
+    if (t.mistakeFlagged) return false;
+    const hasDeviation = monitoringEvents.some(
+      (e) => e.tradeId === t.id && e.deviations.length > 0,
+    );
+    return !hasDeviation;
+  }).length;
+  const rulesFollowedCurrent = cleanClosedTrades + cleanOpenTrades;
+  const rulesFollowedTotal = totalTrades;
   const ruleAdherencePercent =
-    ruleCheckTotal > 0
-      ? Math.round((totalApprovedTrades / ruleCheckTotal) * 100)
+    rulesFollowedTotal > 0
+      ? Math.round((rulesFollowedCurrent / rulesFollowedTotal) * 100)
       : 100;
   const rulesFollowed: RulesFollowedShape = {
-    current: totalApprovedTrades,
-    total: Math.max(ruleCheckTotal, totalApprovedTrades),
+    current: rulesFollowedCurrent,
+    total: rulesFollowedTotal,
     adherence: ruleAdherencePercent,
   };
 

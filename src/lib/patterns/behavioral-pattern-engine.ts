@@ -91,7 +91,7 @@ export type PatternCategory = (typeof PATTERN_CATEGORIES)[number];
 export const PATTERN_CATEGORY_LABEL: Record<PatternCategory, string> = {
   recurring_rule_break: "Recurring Rule Break",
   escalation_chain: "Escalation Chain",
-  time_of_day: "Time-of-Day Deterioration",
+  time_of_day: "Time-of-Day Discipline Drift",
   improvement: "Improvement Trend",
   reflection_theme: "Reflection Theme",
   dangerous_condition: "Dangerous Condition",
@@ -101,9 +101,9 @@ export const PATTERN_CONFIDENCE_LEVELS = ["low", "moderate", "high"] as const;
 export type PatternConfidence = (typeof PATTERN_CONFIDENCE_LEVELS)[number];
 
 export const PATTERN_CONFIDENCE_LABEL: Record<PatternConfidence, string> = {
-  low: "Low confidence",
-  moderate: "Moderate confidence",
-  high: "High confidence",
+  low: "Low Confidence",
+  moderate: "Moderate Confidence",
+  high: "High Confidence",
 };
 
 export type PatternSeverity = "info" | "caution" | "warning" | "critical";
@@ -835,11 +835,15 @@ function detectEscalationChains(
 const TIME_BUCKETS: ReadonlyArray<{
   id: BehavioralConditionKind;
   label: string;
+  // Short prefix used to build the pattern title — joined with
+  // "Discipline Drift Pattern" so the card reads as one phrase
+  // (e.g. "Midday Discipline Drift Pattern").
+  patternPrefix: string;
   hourRange: [number, number]; // inclusive lower, exclusive upper
 }> = [
-  { id: "near_market_open", label: "Near market open (before 11am)", hourRange: [0, 11] },
-  { id: "midday", label: "Midday (11am–2pm)", hourRange: [11, 14] },
-  { id: "late_session", label: "Late session (after 2pm)", hourRange: [14, 24] },
+  { id: "near_market_open", label: "Near market open (before 11am)", patternPrefix: "Opening Hour", hourRange: [0, 11] },
+  { id: "midday", label: "Midday (11am–2pm)", patternPrefix: "Midday", hourRange: [11, 14] },
+  { id: "late_session", label: "Late session (after 2pm)", patternPrefix: "Late Session", hourRange: [14, 24] },
 ];
 
 const DETERIORATION_TYPES: ReadonlySet<BehaviorEventType> = new Set([
@@ -896,8 +900,8 @@ function detectTimeOfDay(
     patterns.push({
       id: `tod-${bucket.id}`,
       category: "time_of_day",
-      title: `Deterioration clusters ${bucket.label.toLowerCase()}`,
-      description: `${Math.round(ratio * 100)}% of behavioral-deterioration events landed in this window.`,
+      title: `${bucket.patternPrefix} Discipline Drift Pattern`,
+      description: `${Math.round(ratio * 100)}% of discipline drift events occurred during this time window.`,
       severity: "caution",
       confidence: confidenceFromObservation(entry.count, sessionIds.length),
       occurrenceCount: entry.count,
@@ -1103,7 +1107,7 @@ function detectReflectionThemes(
       category: "reflection_theme",
       title: `"${themeLabel(themeId)}" appears in reflections`,
       description: correlationStrong
-        ? `Theme observed in ${occurrenceCount} reflection${occurrenceCount === 1 ? "" : "s"} and correlates with ${correlatedUnique.length} distinct deterioration event types in the same sessions.`
+        ? `Theme observed in ${occurrenceCount} reflection${occurrenceCount === 1 ? "" : "s"} and correlates with ${correlatedUnique.length} distinct discipline drift event types in the same sessions.`
         : `Theme observed in ${occurrenceCount} reflection${occurrenceCount === 1 ? "" : "s"} during this window.`,
       severity: correlationStrong ? "warning" : "caution",
       confidence: confidenceFromObservation(occurrenceCount, sessionIds.length),
@@ -1271,7 +1275,7 @@ function detectDangerousConditions(
         id: "dangerous-losses-precede-destruction",
         category: "dangerous_condition",
         title: "Destructive sessions follow consecutive losses",
-        description: `${qualifying} of the ${topDestructive.length} most destructive sessions in this window saw 2+ losses before the deterioration began.`,
+        description: `${qualifying} of the ${topDestructive.length} most destructive sessions in this window saw 2+ losses before the discipline drift began.`,
         severity: "critical",
         confidence: confidenceFromObservation(qualifying, qualifying),
         occurrenceCount: qualifying,

@@ -69,7 +69,7 @@ export function BehavioralPerformanceSection({
           }
         />
         <MetricCell
-          label="Early Session Deterioration"
+          label="Discipline Drift"
           value={String(data.earlySessionDeteriorationEvents)}
           secondary="events"
           tone={data.earlySessionDeteriorationEvents === 0 ? "emerald" : "amber"}

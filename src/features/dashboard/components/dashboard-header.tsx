@@ -31,8 +31,8 @@ export function DashboardHeader({ name }: { name: string }) {
   const pnLNegative = intel.pnLToday < 0;
   const PnLIcon = pnLNegative ? TrendingDown : TrendingUp;
   const pnLBadgeTone = pnLNegative
-    ? "bg-rose-500/15 text-rose-400 ring-rose-500/30"
-    : "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30";
+    ? "bg-rose-500/20 text-rose-300 ring-rose-500/45 shadow-[0_0_18px_-6px_rgba(244,63,94,0.55)]"
+    : "bg-emerald-500/20 text-emerald-300 ring-emerald-500/45 shadow-[0_0_18px_-6px_rgba(16,185,129,0.55)]";
   const pnLTextTone = pnLPositive
     ? "text-emerald-400"
     : pnLNegative

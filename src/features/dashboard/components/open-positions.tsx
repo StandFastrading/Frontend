@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import type { ActiveTrade, MarketType } from "@/types";
+import { deriveCurrentAccountBalance } from "@/lib/sessions/account-balance";
 import { useCurrentSessionTrades } from "@/lib/sessions/session-helpers";
 import { useAppStore } from "@/store";
 import { cn } from "@/lib/utils";
@@ -117,6 +118,7 @@ export function OpenPositions() {
   // the new session id.
   const { activeTrades } = useCurrentSessionTrades();
   const accountSize = useAppStore((s) => s.riskRules.accountSize);
+  const closedTrades = useAppStore((s) => s.closedTrades);
 
   const openTrades = activeTrades.filter((t) => t.status === "active");
 
@@ -128,8 +130,12 @@ export function OpenPositions() {
     (sum, t) => sum + (t.currentRisk ?? t.originalRisk ?? 0),
     0,
   );
+  // Account risk % uses Current Balance (Starting + Realized P/L Today)
+  // so the trader's open exposure is measured against the money they
+  // actually have to trade against right now.
+  const currentBalance = deriveCurrentAccountBalance(accountSize, closedTrades);
   const totalAccountRiskPercent =
-    accountSize > 0 ? (totalOpenRiskDollars / accountSize) * 100 : 0;
+    currentBalance > 0 ? (totalOpenRiskDollars / currentBalance) * 100 : 0;
   const combinedR = openTrades.reduce((sum, t) => {
     const r = rAtRisk(t);
     return r != null ? sum + r : sum;

@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Flag, LogOut, Move, PlusCircle, X } from "lucide-react";
+import {
+  Flag,
+  LogOut,
+  Move,
+  PlusCircle,
+  Target,
+  TrendingDown,
+  X,
+} from "lucide-react";
 
 import {
   Dialog,
@@ -14,9 +22,15 @@ import { Label } from "@/components/ui/label";
 import {
   EXIT_REASONS,
   EXIT_REASON_LABEL,
+  STOP_MOVE_REASONS,
+  STOP_MOVE_REASON_LABEL,
+  TARGET_MOVE_REASONS,
+  TARGET_MOVE_REASON_LABEL,
   type ActiveTrade,
   type ActiveTradeExitOutcome,
   type ExitReason,
+  type StopMoveReason,
+  type TargetMoveReason,
 } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -27,16 +41,25 @@ import { cn } from "@/lib/utils";
 
 export type ActiveTradeActionMode =
   | "move_stop"
+  | "move_target"
   | "add_position"
+  | "take_partial_profit"
   | "mark_mistake"
   | "log_exit";
 
 export type ActiveTradeActionSubmit =
-  | { mode: "move_stop"; newStopPrice: number }
+  | { mode: "move_stop"; newStopPrice: number; reason: StopMoveReason }
+  | { mode: "move_target"; newTargetPrice: number; reason: TargetMoveReason }
   | {
       mode: "add_position";
       additionalSize: number;
       addedAtPrice: number;
+    }
+  | {
+      mode: "take_partial_profit";
+      sizeReduced: number;
+      exitPrice: number;
+      note: string;
     }
   | { mode: "mark_mistake"; note: string }
   | {
@@ -117,9 +140,16 @@ function ModalHeader({
     move_stop: {
       title: "Move Stop",
       description:
-        "Enter the new stop price. StandFast will compare it to your original plan and log any deviation.",
+        "Enter the new stop price and the reason. StandFast captures the decision context for behavioral history.",
       icon: Move,
       tone: "bg-amber-500/15 text-amber-300 ring-amber-500/30",
+    },
+    move_target: {
+      title: "Move Target",
+      description:
+        "Update your working target with the reason for the change. Behavioral data is captured for future analytics.",
+      icon: Target,
+      tone: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30",
     },
     add_position: {
       title: "Add to Position",
@@ -127,6 +157,13 @@ function ModalHeader({
         "Enter the additional size and the price you added at. We'll recalculate total risk, exposure, and reward:risk.",
       icon: PlusCircle,
       tone: "bg-amber-500/15 text-amber-300 ring-amber-500/30",
+    },
+    take_partial_profit: {
+      title: "Take Partial Profit",
+      description:
+        "Log shares sold and the exit price. Remaining size is shown automatically. Note your reasoning for behavioral review.",
+      icon: TrendingDown,
+      tone: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30",
     },
     mark_mistake: {
       title: "Mark as Mistake",
@@ -194,9 +231,23 @@ function ModalBody({
       <MoveStopBody trade={trade} onSubmit={onSubmit} onClose={onClose} />
     );
   }
+  if (mode === "move_target") {
+    return (
+      <MoveTargetBody trade={trade} onSubmit={onSubmit} onClose={onClose} />
+    );
+  }
   if (mode === "add_position") {
     return (
       <AddPositionBody trade={trade} onSubmit={onSubmit} onClose={onClose} />
+    );
+  }
+  if (mode === "take_partial_profit") {
+    return (
+      <TakePartialProfitBody
+        trade={trade}
+        onSubmit={onSubmit}
+        onClose={onClose}
+      />
     );
   }
   if (mode === "mark_mistake") {
@@ -219,6 +270,7 @@ function MoveStopBody({
   onClose: () => void;
 }) {
   const [value, setValue] = useState("");
+  const [reason, setReason] = useState<StopMoveReason>("breakeven");
   const parsed = parseNumber(value);
 
   return (
@@ -227,7 +279,7 @@ function MoveStopBody({
       onSubmit={(e) => {
         e.preventDefault();
         if (parsed == null) return;
-        onSubmit({ mode: "move_stop", newStopPrice: parsed });
+        onSubmit({ mode: "move_stop", newStopPrice: parsed, reason });
       }}
     >
       <Comparison
@@ -248,9 +300,206 @@ function MoveStopBody({
           autoFocus
         />
       </div>
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Reason
+        </Label>
+        <select
+          value={reason}
+          onChange={(e) => setReason(e.target.value as StopMoveReason)}
+          className="rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+        >
+          {STOP_MOVE_REASONS.map((r) => (
+            <option key={r} value={r} className="bg-card text-foreground">
+              {STOP_MOVE_REASON_LABEL[r]}
+            </option>
+          ))}
+        </select>
+      </div>
       <Footer
         confirmLabel="Update Stop"
         disabled={parsed == null}
+        onClose={onClose}
+      />
+    </form>
+  );
+}
+
+function MoveTargetBody({
+  trade,
+  onSubmit,
+  onClose,
+}: {
+  trade: ActiveTrade;
+  onSubmit: (payload: ActiveTradeActionSubmit) => void;
+  onClose: () => void;
+}) {
+  const [value, setValue] = useState("");
+  const [reason, setReason] = useState<TargetMoveReason>("momentum_extension");
+  const parsed = parseNumber(value);
+
+  return (
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (parsed == null) return;
+        onSubmit({ mode: "move_target", newTargetPrice: parsed, reason });
+      }}
+    >
+      <Comparison
+        baselineLabel="Original Target"
+        baseline={trade.targetPrice}
+        currentLabel="Current Target"
+        current={trade.currentTargetPrice ?? trade.targetPrice}
+      />
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          New Target Price
+        </Label>
+        <Input
+          inputMode="decimal"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="0.00"
+          autoFocus
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Reason
+        </Label>
+        <select
+          value={reason}
+          onChange={(e) => setReason(e.target.value as TargetMoveReason)}
+          className="rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+        >
+          {TARGET_MOVE_REASONS.map((r) => (
+            <option key={r} value={r} className="bg-card text-foreground">
+              {TARGET_MOVE_REASON_LABEL[r]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Footer
+        confirmLabel="Update Target"
+        disabled={parsed == null}
+        onClose={onClose}
+      />
+    </form>
+  );
+}
+
+function TakePartialProfitBody({
+  trade,
+  onSubmit,
+  onClose,
+}: {
+  trade: ActiveTrade;
+  onSubmit: (payload: ActiveTradeActionSubmit) => void;
+  onClose: () => void;
+}) {
+  const [size, setSize] = useState("");
+  const [price, setPrice] = useState("");
+  const [note, setNote] = useState("");
+  const sizeNum = parseNumber(size);
+  const priceNum = parseNumber(price);
+  const remaining =
+    sizeNum != null
+      ? Math.max(0, trade.currentPositionSize - sizeNum)
+      : trade.currentPositionSize;
+  const sizeExceedsHeld =
+    sizeNum != null && sizeNum > trade.currentPositionSize;
+  const submitDisabled =
+    sizeNum == null || sizeNum <= 0 || priceNum == null || sizeExceedsHeld;
+
+  return (
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (sizeNum == null || priceNum == null || sizeNum <= 0) return;
+        if (sizeExceedsHeld) return;
+        onSubmit({
+          mode: "take_partial_profit",
+          sizeReduced: sizeNum,
+          exitPrice: priceNum,
+          note,
+        });
+      }}
+    >
+      <Comparison
+        baselineLabel="Original Size"
+        baseline={trade.positionSize}
+        currentLabel="Currently Held"
+        current={trade.currentPositionSize}
+      />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Shares Sold
+          </Label>
+          <Input
+            inputMode="decimal"
+            value={size}
+            onChange={(e) => setSize(e.target.value)}
+            placeholder="0"
+            autoFocus
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Exit Price
+          </Label>
+          <Input
+            inputMode="decimal"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="0.00"
+          />
+        </div>
+      </div>
+      {/* Remaining shares — derived from the in-flight inputs, not
+          stored anywhere. Surfaces the post-action position state
+          so the trader doesn't have to do the arithmetic in their
+          head. Turns rose when the input exceeds what's held. */}
+      <div
+        className={cn(
+          "flex items-center justify-between rounded-lg border px-4 py-3",
+          sizeExceedsHeld
+            ? "border-rose-500/40 bg-rose-500/[0.06]"
+            : "border-emerald-500/30 bg-emerald-500/[0.05]",
+        )}
+      >
+        <span className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Remaining Shares
+        </span>
+        <span
+          className={cn(
+            "text-lg font-semibold tabular-nums",
+            sizeExceedsHeld ? "text-rose-300" : "text-emerald-300",
+          )}
+        >
+          {sizeExceedsHeld
+            ? `— (cannot sell more than ${trade.currentPositionSize})`
+            : remaining}
+        </span>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Note (optional)
+        </Label>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={2}
+          placeholder='e.g. "Sold half at target — letting runners go on momentum."'
+          className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+        />
+      </div>
+      <Footer
+        confirmLabel="Log Partial Profit"
+        disabled={submitDisabled}
         onClose={onClose}
       />
     </form>

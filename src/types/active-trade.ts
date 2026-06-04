@@ -58,10 +58,13 @@ export const activeTradeSchema = z.object({
   originalRisk: z.number().nullable(),
   accountRiskPercent: z.number().nullable(),
   rewardRiskRatio: z.number().nullable(),
-  // Current (mutable) state — moves with Move Stop / Add Position / Partial
-  // Exit. Initialized to match the baseline at activation; updates from the
-  // monitoring engine flow through here.
+  // Current (mutable) state — moves with Move Stop / Move Target / Add
+  // Position / Partial Exit. Initialized to match the baseline at
+  // activation; updates from the monitoring engine flow through here.
+  // `currentTargetPrice` is V1.5 — older records backfill from baseline
+  // `targetPrice` via the migration below.
   currentStopPrice: z.number().nullable(),
+  currentTargetPrice: z.number().nullable(),
   currentPositionSize: z.number(),
   currentAvgEntry: z.number(),
   currentRisk: z.number().nullable(),
@@ -172,6 +175,13 @@ export function migrateActiveTrade(raw: unknown): ActiveTrade | null {
       typeof r.currentStopPrice === "number"
         ? r.currentStopPrice
         : baseStop,
+    currentTargetPrice:
+      typeof r.currentTargetPrice === "number" &&
+      Number.isFinite(r.currentTargetPrice)
+        ? r.currentTargetPrice
+        : typeof r.targetPrice === "number" && Number.isFinite(r.targetPrice)
+          ? r.targetPrice
+          : null,
     currentPositionSize:
       typeof r.currentPositionSize === "number"
         ? r.currentPositionSize
@@ -246,6 +256,7 @@ export type ApprovedTradeSnapshot = Omit<
   | "status"
   | "source"
   | "currentStopPrice"
+  | "currentTargetPrice"
   | "currentPositionSize"
   | "currentAvgEntry"
   | "currentRisk"

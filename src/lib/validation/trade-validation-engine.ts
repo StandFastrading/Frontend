@@ -1,3 +1,4 @@
+import { atLeast } from "@/lib/math/compare";
 import type {
   BehaviorEvent,
   RiskCalculationResult,
@@ -172,6 +173,17 @@ export function validateTrade(args: ValidateTradeArgs): ValidationResult {
   const planEmpty = planLength === 0;
   const setupSelected = tradeInput.setupType.length > 0;
   const setupInList = riskRules.allowedSetups.includes(tradeInput.setupType);
+
+  // Reward:risk minimum check — pre-computed here so every branch of
+  // rule 10 (label / status / message / recommendedAction) reads the
+  // same boolean. Using `atLeast` instead of raw `>=` applies the
+  // shared epsilon tolerance so a display-equal ratio ("2.00 : 1")
+  // doesn't fail because of IEEE 754 noise on the underlying price
+  // arithmetic. See lib/math/compare.ts for the rationale and epsilon.
+  const minRewardRisk = riskRules.minimumRewardRisk;
+  const rewardRiskRatio = risk.rewardRiskRatio;
+  const rewardRiskUnderMinimum =
+    rewardRiskRatio != null && !atLeast(rewardRiskRatio, minRewardRisk);
 
   // Labels are status-dependent on purpose — when a rule is passing, the
   // positive framing ("Stop loss entered") reads as confirmation; when it's
@@ -408,30 +420,29 @@ export function validateTrade(args: ValidateTradeArgs): ValidationResult {
 
     // 10. Reward:risk ratio
     //   - pass if no target price yet (neutral, not a violation)
-    //   - warning if below user's `minimumRewardRisk`
+    //   - pass if reward:risk is at or above the configured minimum,
+    //     with the epsilon tolerance applied by `atLeast` above so
+    //     exact-equality cases that float arithmetic drives a
+    //     fraction below the threshold still pass
+    //   - warning otherwise
+    //
+    // All four branches read `rewardRiskUnderMinimum` to stay in
+    // lockstep — adjusting tolerance or threshold semantics later
+    // only requires changing the boolean computed once above.
     {
       id: RULE_IDS.rewardRisk,
-      label:
-        risk.rewardRiskRatio != null &&
-        risk.rewardRiskRatio < riskRules.minimumRewardRisk
-          ? "Reward:risk below minimum"
-          : "Reward:risk meets minimum requirement",
-      status:
-        risk.rewardRiskRatio == null
-          ? "pass"
-          : risk.rewardRiskRatio >= riskRules.minimumRewardRisk
-            ? "pass"
-            : "warning",
-      message:
-        risk.rewardRiskRatio != null &&
-        risk.rewardRiskRatio < riskRules.minimumRewardRisk
-          ? `Reward:risk is ${risk.rewardRiskRatio.toFixed(2)} : 1 (minimum ${riskRules.minimumRewardRisk.toFixed(2)} : 1)`
-          : undefined,
-      recommendedAction:
-        risk.rewardRiskRatio != null &&
-        risk.rewardRiskRatio < riskRules.minimumRewardRisk
-          ? "Extend target or tighten stop until reward:risk meets your minimum"
-          : undefined,
+      label: rewardRiskUnderMinimum
+        ? "Reward:risk below minimum"
+        : "Reward:risk meets minimum requirement",
+      status: rewardRiskUnderMinimum ? "warning" : "pass",
+      message: rewardRiskUnderMinimum
+        ? // Non-null assertion safe: rewardRiskUnderMinimum is only
+          // true when rewardRiskRatio is a defined number.
+          `Reward:risk is ${rewardRiskRatio!.toFixed(2)} : 1 (minimum ${minRewardRisk.toFixed(2)} : 1)`
+        : undefined,
+      recommendedAction: rewardRiskUnderMinimum
+        ? "Extend target or tighten stop until reward:risk meets your minimum"
+        : undefined,
     },
   ];
 

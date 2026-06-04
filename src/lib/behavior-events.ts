@@ -44,6 +44,12 @@ export const BEHAVIOR_EVENT_TYPES = {
   // *that* the trader moved a stop / added size. Persisted as wire values.
   STOP_MOVED_FURTHER: "stop_moved_further",
   STOP_TIGHTENED: "stop_tightened",
+  // V1.5 — emitted on Move Target. Target moves aren't deviations
+  // (extending profit is often disciplined behavior), so the deviation
+  // engine produces no warnings. The event is captured purely for
+  // behavioral-decision history; future analytics can score target-
+  // management quality from the persisted `reason` metadata.
+  TARGET_MOVED: "target_moved",
   POSITION_SIZE_INCREASED: "position_size_increased",
   RISK_EXPOSURE_INCREASED: "risk_exposure_increased",
   AVERAGING_DOWN_DETECTED: "averaging_down_detected",
@@ -159,6 +165,13 @@ export const BEHAVIOR_EVENT_DISPLAY: Record<
     displayTitle: "Stop tightened",
     displayDescription: "Stop moved closer to entry to reduce account risk.",
     tone: "emerald",
+    icon: Move,
+  },
+  [BEHAVIOR_EVENT_TYPES.TARGET_MOVED]: {
+    displayTitle: "Target moved",
+    displayDescription:
+      "Target price updated — decision context captured for behavioral history.",
+    tone: "brand",
     icon: Move,
   },
   [BEHAVIOR_EVENT_TYPES.POSITION_SIZE_INCREASED]: {

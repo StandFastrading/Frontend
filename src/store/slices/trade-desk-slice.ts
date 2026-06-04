@@ -1,6 +1,9 @@
 import { BEHAVIOR_EVENT_TYPES } from "@/lib/behavior-events";
 import type { BehaviorEventType } from "@/lib/behavior-events";
-import { deriveCurrentAccountBalance } from "@/lib/sessions/account-balance";
+import {
+  deriveCurrentAccountBalance,
+  deriveRedTradesToday,
+} from "@/lib/sessions/account-balance";
 import { getCurrentSessionEvents } from "@/lib/sessions/session-helpers";
 import {
   parsePrice,
@@ -284,10 +287,20 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
       state.riskRules.accountSize,
       state.closedTrades,
     );
+    // Red-trade count is DERIVED from closed trades at read time rather
+    // than trusting the cached `session.redTradesToday`. The cached
+    // counter can drift if the browser tab stays open past midnight and
+    // never rehydrates — the boundary system only rolls the session on
+    // hydrate / on action entry. Deriving here is the defense-in-depth
+    // half of the fix.
+    const sessionMetricsForValidation = {
+      ...state.session,
+      redTradesToday: deriveRedTradesToday(state.closedTrades),
+    };
     const result = validateTrade({
       tradeInput: state.tradeInput,
       riskRules: state.riskRules,
-      sessionMetrics: state.session,
+      sessionMetrics: sessionMetricsForValidation,
       behaviorEvents: sessionEvents,
       currentAccountBalance,
     });
@@ -295,6 +308,10 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
   },
 
   checkTrade: () => {
+    // Boundary guard — roll the session if the active one is stale
+    // (yesterday's). Preserves the trader's in-flight form so the plan
+    // they just typed isn't wiped before validation runs.
+    get().ensureSessionForToday({ preserveDeskState: true });
     // Always run the engine fresh on click — we don't trust whatever
     // `recomputeValidation()` last computed in case anything stale slipped
     // in between input change and click.
@@ -304,10 +321,14 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
       state.riskRules.accountSize,
       state.closedTrades,
     );
+    const sessionMetricsForValidation = {
+      ...state.session,
+      redTradesToday: deriveRedTradesToday(state.closedTrades),
+    };
     const result = validateTrade({
       tradeInput: state.tradeInput,
       riskRules: state.riskRules,
-      sessionMetrics: state.session,
+      sessionMetrics: sessionMetricsForValidation,
       behaviorEvents: sessionEvents,
       currentAccountBalance,
     });
@@ -340,7 +361,7 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
         riskCalculation: validateTrade({
           tradeInput: prevOriginal,
           riskRules: state.riskRules,
-          sessionMetrics: state.session,
+          sessionMetrics: sessionMetricsForValidation,
           behaviorEvents: sessionEvents,
           currentAccountBalance,
         }).riskCalculation,
@@ -403,6 +424,11 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
   },
 
   markTradeAsActive: () => {
+    // Boundary guard — roll the session if needed before activating.
+    // Preserves the trader's approvedSnapshot (and the rest of the
+    // desk state) through the rollover so the activation still has
+    // its source data.
+    get().ensureSessionForToday({ preserveDeskState: true });
     const { approvedSnapshot } = get();
     if (!approvedSnapshot) return;
 
@@ -413,7 +439,10 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
       activatedAt,
       // Mutable state initialized from the baseline. The deviation engine
       // compares against the baseline; these track the live position.
+      // `currentTargetPrice` mirrors `targetPrice` at activation; Move
+      // Target rewrites it without touching the immutable baseline.
       currentStopPrice: approvedSnapshot.stopPrice,
+      currentTargetPrice: approvedSnapshot.targetPrice,
       currentPositionSize: approvedSnapshot.positionSize,
       currentAvgEntry: approvedSnapshot.entryPrice,
       currentRisk: approvedSnapshot.originalRisk,
@@ -491,6 +520,11 @@ export const createTradeDeskSlice: SliceCreator<TradeDeskSlice> = (
   },
 
   recordInterventionDecision: (decision) => {
+    // Boundary guard — roll the session before recording the decision
+    // so the resulting behavior event (TRADE_REVISED / TRADE_AVOIDED /
+    // TRADE_OVERRIDE_ACCEPTED / WARNING_IGNORED) lands under the
+    // correct sessionId if the previous one was stale.
+    get().ensureSessionForToday({ preserveDeskState: true });
     const { tradeInput, validation, modalResults } = get();
     if (!validation) return;
 

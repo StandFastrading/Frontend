@@ -38,15 +38,30 @@ export type SessionsSlice = {
   // non-React callers (other slice actions, persistence migrations) can
   // call them without a hook. React components should prefer the hooks
   // in `@/lib/sessions/session-helpers` so reads are memoized.
-  startNewSession: (type?: SessionType, customLabel?: string | null) => void;
+  // `opts.preserveDeskState` skips the default behavior of wiping
+  // `tradeInput` / `validation` / `hasCheckedTrade` / `approvedSnapshot` /
+  // modal state. Default (omitted) preserves the user-triggered "Start
+  // New Session" semantic: explicit fresh slate. Automatic boundary
+  // rollovers from `ensureSessionForToday` pass `preserveDeskState: true`
+  // so a mid-form midnight crossing doesn't lose the trader's in-flight
+  // plan before validation gets a chance to run.
+  startNewSession: (
+    type?: SessionType,
+    customLabel?: string | null,
+    opts?: { preserveDeskState?: boolean },
+  ) => void;
   closeCurrentSession: () => void;
   // Change the type label on the active session without resetting metrics
   // or creating a new session. Used by the dashboard header dropdown.
   setSessionType: (type: SessionType, customLabel?: string | null) => void;
-  // Idempotent ensure-active-for-today: called once on hydration. If
-  // there's no active session OR the active session belongs to a previous
-  // calendar day, the stale session is closed and a fresh one starts.
-  ensureSessionForToday: () => void;
+  // Idempotent ensure-active-for-today. Called from `onRehydrateStorage`
+  // (default semantics: clean slate when rolling) AND from the top of
+  // every Trade Desk / Active Trade Monitoring action (semantics:
+  // `preserveDeskState: true` — roll the session but keep whatever the
+  // trader was typing). If there's no active session OR the active
+  // session belongs to a previous calendar day, the stale session is
+  // closed and a fresh one starts.
+  ensureSessionForToday: (opts?: { preserveDeskState?: boolean }) => void;
 
   // [TEMPORARY · DEV-ONLY] Wipes today's session-scoped records so the
   // Behavioral State Aggregator can be tested from a clean baseline.
@@ -66,7 +81,7 @@ export const createSessionsSlice: SliceCreator<SessionsSlice> = (
   sessions: [],
   activeSessionId: null,
 
-  startNewSession: (type = "regular", customLabel = null) => {
+  startNewSession: (type = "regular", customLabel = null, opts = {}) => {
     set((state) => {
       // Close the existing active session if there is one.
       const closedSessions = state.sessions.map((s) =>
@@ -75,22 +90,30 @@ export const createSessionsSlice: SliceCreator<SessionsSlice> = (
           : s,
       );
       const next = buildSession(type, customLabel);
+      // Trade Desk in-flight state. Cleared by default (user-triggered
+      // "Start New Session" wants a clean slate). Skipped when the
+      // caller passes `preserveDeskState: true` — that's the automatic
+      // midnight rollover path; wiping the trader's typed plan before
+      // validation runs would be bad UX.
+      const deskClear = opts.preserveDeskState
+        ? {}
+        : {
+            tradeInput: EMPTY_TRADE_INPUT,
+            validation: null,
+            hasCheckedTrade: false,
+            approvedSnapshot: null,
+            modalOpen: false,
+            modalResults: [],
+          };
       return {
         sessions: [...closedSessions, next],
         activeSessionId: next.sessionId,
         // Reset live counters — historical events stay where they are.
+        // Persisted active trades from the previous session live in the
+        // archive — current-session views already filter them out by
+        // sessionId.
         session: getDefaultSessionMetrics(),
-        // Clear Trade Desk in-flight state so the new session starts on a
-        // clean slate (empty form, no stale validation, no approved
-        // snapshot dangling from the previous session). Persisted active
-        // trades from the previous session live in the archive — current-
-        // session views already filter them out by sessionId.
-        tradeInput: EMPTY_TRADE_INPUT,
-        validation: null,
-        hasCheckedTrade: false,
-        approvedSnapshot: null,
-        modalOpen: false,
-        modalResults: [],
+        ...deskClear,
       };
     });
   },
@@ -124,7 +147,7 @@ export const createSessionsSlice: SliceCreator<SessionsSlice> = (
     }));
   },
 
-  ensureSessionForToday: () => {
+  ensureSessionForToday: (opts = {}) => {
     const { activeSessionId, sessions } = get();
     const today = getCurrentTradingDate();
     const active = activeSessionId
@@ -135,8 +158,11 @@ export const createSessionsSlice: SliceCreator<SessionsSlice> = (
       return;
     }
     // Either no active session or the active session is stale (yesterday).
-    // Close + start fresh.
-    get().startNewSession("regular");
+    // Close + start fresh, threading the desk-preservation flag through
+    // to startNewSession so mid-action callers don't lose their input.
+    get().startNewSession("regular", null, {
+      preserveDeskState: opts.preserveDeskState ?? false,
+    });
   },
 
   // [TEMPORARY · DEV-ONLY]

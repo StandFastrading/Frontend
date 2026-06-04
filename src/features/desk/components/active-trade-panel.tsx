@@ -14,6 +14,8 @@ import {
   Move,
   PlusCircle,
   ShieldAlert,
+  Target,
+  TrendingDown,
   type LucideIcon,
 } from "lucide-react";
 
@@ -162,7 +164,9 @@ export function ActiveTradePanel() {
     });
   }
   const moveStop = useAppStore((s) => s.moveStop);
+  const moveTarget = useAppStore((s) => s.moveTarget);
   const addPosition = useAppStore((s) => s.addPosition);
+  const partialExit = useAppStore((s) => s.partialExit);
   const markMistake = useAppStore((s) => s.markMistake);
   const logExit = useAppStore((s) => s.logExit);
 
@@ -188,8 +192,12 @@ export function ActiveTradePanel() {
   const handleSubmit = (payload: ActiveTradeActionSubmit) => {
     switch (payload.mode) {
       case "move_stop":
-        moveStop(trade.id, payload.newStopPrice);
-        toast.success("Stop updated — deviation analysis logged");
+        moveStop(trade.id, payload.newStopPrice, payload.reason);
+        toast.success("Stop updated — decision context captured");
+        break;
+      case "move_target":
+        moveTarget(trade.id, payload.newTargetPrice, payload.reason);
+        toast.success("Target updated — decision context captured");
         break;
       case "add_position":
         addPosition(
@@ -198,6 +206,15 @@ export function ActiveTradePanel() {
           payload.addedAtPrice,
         );
         toast.success("Add logged — exposure recalculated");
+        break;
+      case "take_partial_profit":
+        partialExit(
+          trade.id,
+          payload.sizeReduced,
+          payload.exitPrice,
+          payload.note,
+        );
+        toast.success("Partial profit logged — remaining position updated");
         break;
       case "mark_mistake":
         markMistake(trade.id, payload.note);
@@ -432,28 +449,59 @@ function ActiveState({
       ) : null}
 
       {/* Action row */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <ActiveAction
-          icon={LogOut}
-          label="Log Exit"
-          onClick={() => onAction("log_exit")}
-        />
-        <ActiveAction
-          icon={Move}
-          label="Move Stop"
-          onClick={() => onAction("move_stop")}
-        />
-        <ActiveAction
-          icon={PlusCircle}
-          label="Add Position"
-          onClick={() => onAction("add_position")}
-        />
-        <ActiveAction
-          icon={Flag}
-          label="Mark Mistake"
-          onClick={() => onAction("mark_mistake")}
-          tone="rose"
-        />
+      {/* Trade Management — partial profits, stop / target moves, and
+          adds. Behavioral data capture lives here: every action carries
+          decision-context metadata (reason / note) onto the monitoring
+          event for future analytics. */}
+      <div className="flex flex-col gap-2">
+        <span className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
+          Trade Management
+        </span>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <ActiveAction
+            icon={TrendingDown}
+            label="Take Partial Profit"
+            onClick={() => onAction("take_partial_profit")}
+          />
+          <ActiveAction
+            icon={Move}
+            label="Move Stop"
+            onClick={() => onAction("move_stop")}
+          />
+          <ActiveAction
+            icon={Target}
+            label="Move Target"
+            onClick={() => onAction("move_target")}
+          />
+          <ActiveAction
+            icon={PlusCircle}
+            label="Add Position"
+            onClick={() => onAction("add_position")}
+          />
+        </div>
+      </div>
+
+      {/* Session Controls — terminal trade actions (Log Exit archives
+          the trade; Mark Mistake flags it for behavioral review). Kept
+          separate from management so the trader sees the end-state
+          actions distinctly from the in-trade adjustments. */}
+      <div className="flex flex-col gap-2">
+        <span className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
+          Session Controls
+        </span>
+        <div className="grid grid-cols-2 gap-2">
+          <ActiveAction
+            icon={LogOut}
+            label="Log Exit"
+            onClick={() => onAction("log_exit")}
+          />
+          <ActiveAction
+            icon={Flag}
+            label="Mark Mistake"
+            onClick={() => onAction("mark_mistake")}
+            tone="rose"
+          />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
@@ -470,6 +518,7 @@ function PlanVsCurrentGrid({ trade }: { trade: ActiveTrade }) {
   // baseline value itself was missing. `formatPrice` then renders "—".
   const currentEntry = trade.currentAvgEntry ?? trade.entryPrice;
   const currentStop = trade.currentStopPrice ?? trade.stopPrice;
+  const currentTarget = trade.currentTargetPrice ?? trade.targetPrice;
   return (
     <div className="grid grid-cols-3 gap-2">
       <Stat
@@ -490,6 +539,11 @@ function PlanVsCurrentGrid({ trade }: { trade: ActiveTrade }) {
       <Stat
         label="Target"
         baseline={formatPrice(trade.targetPrice)}
+        current={
+          currentTarget !== trade.targetPrice
+            ? formatPrice(currentTarget)
+            : null
+        }
         currentTone="emerald"
       />
     </div>
@@ -717,6 +771,8 @@ function describeUpdate(update: MonitoringEvent["update"]): string {
   switch (update.type) {
     case "move_stop":
       return `Stop set to ${update.newStopPrice}`;
+    case "move_target":
+      return `Target set to ${update.newTargetPrice}`;
     case "add_position":
       return `Added ${update.additionalSize} at ${update.addedAtPrice}`;
     case "partial_exit":

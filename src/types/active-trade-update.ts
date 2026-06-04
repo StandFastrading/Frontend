@@ -50,13 +50,67 @@ export const behavioralDeviationSchema = z.object({
 });
 export type BehavioralDeviation = z.infer<typeof behavioralDeviationSchema>;
 
+// Decision-context reasons captured at Move Stop time. The point is
+// behavioral data capture — not classification — so future analytics
+// can mine why traders move stops (breakeven discipline, profit
+// locking, structure shifts, defensive risk reduction). Wire
+// identifiers persist; add new IDs, never rename.
+export const STOP_MOVE_REASONS = [
+  "breakeven",
+  "lock_profit",
+  "structure",
+  "risk_reduction",
+  "other",
+] as const;
+export type StopMoveReason = (typeof STOP_MOVE_REASONS)[number];
+
+export const STOP_MOVE_REASON_LABEL: Record<StopMoveReason, string> = {
+  breakeven: "Breakeven",
+  lock_profit: "Lock Profit",
+  structure: "Structure",
+  risk_reduction: "Risk Reduction",
+  other: "Other",
+};
+
+// Decision-context reasons captured at Move Target time. Mirrors stop
+// reasons in shape; semantically distinct (target moves are usually
+// about extending profit, while stop moves are about protecting risk).
+export const TARGET_MOVE_REASONS = [
+  "momentum_extension",
+  "new_resistance_level",
+  "scaling_plan",
+  "risk_adjustment",
+  "other",
+] as const;
+export type TargetMoveReason = (typeof TARGET_MOVE_REASONS)[number];
+
+export const TARGET_MOVE_REASON_LABEL: Record<TargetMoveReason, string> = {
+  momentum_extension: "Momentum Extension",
+  new_resistance_level: "New Resistance Level",
+  scaling_plan: "Scaling Plan",
+  risk_adjustment: "Risk Adjustment",
+  other: "Other",
+};
+
 // Discriminated union of every active-trade action. The Behavior Deviation
 // Engine consumes one of these and returns the deviations + recommendations
 // produced by applying it to the trade.
+//
+// Reason fields on move_stop / move_target and the optional note on
+// partial_exit are V1.5 additions for behavioral-decision capture. All
+// are `.optional()` so persisted records from before V1.5 still
+// validate. Future analytics passes can mine these for stop-management
+// quality, target-extension frequency, scaling discipline, etc.
 export const activeTradeUpdateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("move_stop"),
     newStopPrice: z.number(),
+    reason: z.enum(STOP_MOVE_REASONS).optional(),
+  }),
+  z.object({
+    type: z.literal("move_target"),
+    newTargetPrice: z.number(),
+    reason: z.enum(TARGET_MOVE_REASONS).optional(),
   }),
   z.object({
     type: z.literal("add_position"),
@@ -67,6 +121,7 @@ export const activeTradeUpdateSchema = z.discriminatedUnion("type", [
     type: z.literal("partial_exit"),
     sizeReduced: z.number(),
     exitPrice: z.number(),
+    note: z.string().optional(),
   }),
   z.object({
     type: z.literal("mark_mistake"),

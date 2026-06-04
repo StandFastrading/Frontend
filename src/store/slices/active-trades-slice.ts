@@ -10,6 +10,8 @@ import type {
   ClosedTrade,
   ExitReason,
   MonitoringEvent,
+  StopMoveReason,
+  TargetMoveReason,
 } from "@/types";
 import type { SliceCreator } from "@/store/types";
 
@@ -33,16 +35,34 @@ export type ActiveTradesSlice = {
   //   3. Mutates the trade (currentStopPrice, currentPositionSize, …)
   //   4. Appends a MonitoringEvent to `monitoringEvents`
   //   5. Appends a BehaviorEvent to `behaviorEvents` for the feed
-  moveStop: (tradeId: string, newStopPrice: number) => void;
+  // `reason` is the V1.5 decision-context capture. Optional for
+  // backwards compatibility — older callers still work and produce a
+  // monitoring event without the reason metadata.
+  moveStop: (
+    tradeId: string,
+    newStopPrice: number,
+    reason?: StopMoveReason,
+  ) => void;
+  // V1.5 — move the working target with a reason for the change. Not
+  // a deviation (target extensions are usually disciplined behavior),
+  // but the event + reason persist for future analytics.
+  moveTarget: (
+    tradeId: string,
+    newTargetPrice: number,
+    reason?: TargetMoveReason,
+  ) => void;
   addPosition: (
     tradeId: string,
     additionalSize: number,
     addedAtPrice: number,
   ) => void;
+  // V1.5 — partial-profit takes carry an optional contextual note
+  // alongside the price + size.
   partialExit: (
     tradeId: string,
     sizeReduced: number,
     exitPrice: number,
+    note?: string,
   ) => void;
   markMistake: (tradeId: string, note: string) => void;
   logExit: (
@@ -88,9 +108,14 @@ function recalcCurrentRisk(trade: ActiveTrade): {
   // target on the wrong side) belong in the deviation engine.
   const riskPS = Math.abs(trade.currentAvgEntry - trade.currentStopPrice);
   const currentRisk = riskPS * trade.currentPositionSize;
+  // Reward leg uses the LIVE target (`currentTargetPrice`) so a Move
+  // Target action immediately re-prices R:R. Falls back to baseline
+  // `targetPrice` on legacy records the migration hasn't backfilled
+  // yet, then null if no target was ever set.
+  const liveTarget = trade.currentTargetPrice ?? trade.targetPrice;
   let currentRewardRiskRatio: number | null = null;
-  if (trade.targetPrice != null && riskPS > 0) {
-    const rewardPS = Math.abs(trade.targetPrice - trade.currentAvgEntry);
+  if (liveTarget != null && riskPS > 0) {
+    const rewardPS = Math.abs(liveTarget - trade.currentAvgEntry);
     currentRewardRiskRatio = rewardPS / riskPS;
   }
   return { currentRisk, currentRewardRiskRatio };
@@ -216,10 +241,10 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
       })),
     clearActiveTrades: () => set(() => ({ activeTrades: [] })),
 
-    moveStop: (tradeId, newStopPrice) => {
+    moveStop: (tradeId, newStopPrice, reason) => {
       const trade = get().activeTrades.find((t) => t.id === tradeId);
       if (!trade) return;
-      recordUpdate(trade, { type: "move_stop", newStopPrice });
+      recordUpdate(trade, { type: "move_stop", newStopPrice, reason });
       const mutated: ActiveTrade = { ...trade, currentStopPrice: newStopPrice };
       const recalc = recalcCurrentRisk(mutated);
       // Risk % uses Current Balance (Starting + Realized P/L Today) so
@@ -236,6 +261,24 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
           recalc.currentRisk != null && balance > 0
             ? (recalc.currentRisk / balance) * 100
             : mutated.currentAccountRiskPercent,
+        currentRewardRiskRatio: recalc.currentRewardRiskRatio,
+      });
+    },
+
+    moveTarget: (tradeId, newTargetPrice, reason) => {
+      const trade = get().activeTrades.find((t) => t.id === tradeId);
+      if (!trade) return;
+      recordUpdate(trade, { type: "move_target", newTargetPrice, reason });
+      const mutated: ActiveTrade = {
+        ...trade,
+        currentTargetPrice: newTargetPrice,
+      };
+      // Risk dollar amount doesn't change with a target move (it's a
+      // stop-side number), but R:R does — recompute via the shared
+      // helper to keep the math centralized.
+      const recalc = recalcCurrentRisk(mutated);
+      replaceTrade({
+        ...mutated,
         currentRewardRiskRatio: recalc.currentRewardRiskRatio,
       });
     },
@@ -274,11 +317,22 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
       });
     },
 
-    partialExit: (tradeId, sizeReduced, exitPrice) => {
+    partialExit: (tradeId, sizeReduced, exitPrice, note) => {
       const trade = get().activeTrades.find((t) => t.id === tradeId);
       if (!trade) return;
       const newSize = Math.max(0, trade.currentPositionSize - sizeReduced);
-      recordUpdate(trade, { type: "partial_exit", sizeReduced, exitPrice });
+      // Trim and persist the optional decision-context note. The note
+      // rides on the monitoring event's update field; downstream
+      // consumers (Trade Detail timeline, future analytics) read it
+      // from there. Empty/whitespace-only inputs are dropped so the
+      // schema gets a clean omit rather than an empty string.
+      const trimmedNote = note?.trim() ?? "";
+      recordUpdate(trade, {
+        type: "partial_exit",
+        sizeReduced,
+        exitPrice,
+        note: trimmedNote.length > 0 ? trimmedNote : undefined,
+      });
       const mutated: ActiveTrade = {
         ...trade,
         currentPositionSize: newSize,
@@ -323,6 +377,13 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
       exitReason,
       exitNotes,
     ) => {
+      // Boundary guard — roll the session if it's stale (yesterday).
+      // This is the action that produces the ClosedTrade record + bumps
+      // the daily-loss / red-trade counters; a stale active session
+      // would otherwise stamp the archive with the wrong tradingDate
+      // and silently carry yesterday's counters into today's caps.
+      // Preserves desk state for symmetry with the other action sites.
+      get().ensureSessionForToday({ preserveDeskState: true });
       const trade = get().activeTrades.find((t) => t.id === tradeId);
       if (!trade) return;
 

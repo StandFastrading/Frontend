@@ -146,6 +146,8 @@ function describeUpdate(update: MonitoringEvent["update"]): string {
   switch (update.type) {
     case "move_stop":
       return `Stop set to ${update.newStopPrice}`;
+    case "move_target":
+      return `Target set to ${update.newTargetPrice}`;
     case "add_position":
       return `Added ${update.additionalSize} at ${update.addedAtPrice}`;
     case "partial_exit":

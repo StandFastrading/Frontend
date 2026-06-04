@@ -403,6 +403,8 @@ function pickPrimaryEventType(
   switch (update.type) {
     case "move_stop":
       return BEHAVIOR_EVENT_TYPES.STOP_MOVED;
+    case "move_target":
+      return BEHAVIOR_EVENT_TYPES.TARGET_MOVED;
     case "add_position":
       return BEHAVIOR_EVENT_TYPES.POSITION_ADDED;
     case "partial_exit":
@@ -446,6 +448,13 @@ export function detectDeviations(
       // No deviation surface today — partial exits and full exits reduce
       // exposure, which we treat as info. Future detectors (e.g. early exit
       // vs target, hold-time deviation) hook in here.
+      break;
+    case "move_target":
+      // Behavioral-data capture only. Target moves aren't deviations —
+      // extending a target on momentum or shifting to a new resistance
+      // level is often disciplined behavior. The reason metadata
+      // persists on the monitoring event for future analytics
+      // (target-extension frequency, scaling discipline).
       break;
   }
 
@@ -511,6 +520,8 @@ function neutralLabel(update: ActiveTradeUpdate): string {
   switch (update.type) {
     case "move_stop":
       return "Stop adjusted";
+    case "move_target":
+      return "Target adjusted";
     case "add_position":
       return "Position added";
     case "partial_exit":
@@ -526,6 +537,8 @@ function neutralDescription(update: ActiveTradeUpdate): string {
   switch (update.type) {
     case "move_stop":
       return `Stop set to ${update.newStopPrice}.`;
+    case "move_target":
+      return `Target set to ${update.newTargetPrice}.`;
     case "add_position":
       return `${update.additionalSize} added at ${update.addedAtPrice}.`;
     case "partial_exit":

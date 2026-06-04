@@ -1,5 +1,16 @@
 import type { ClosedTrade } from "@/types";
 
+// Today-scoped derivations of closed trades. Centralizes the math the
+// risk-validation and dashboard surfaces use when they need a fresh,
+// authoritative "what happened today" number — instead of trusting a
+// cached session counter that can drift across midnight if the browser
+// tab stays open past a session boundary.
+//
+// What lives here:
+//   * `deriveRealizedPnLToday`          — sum of today's realized P/L
+//   * `deriveCurrentAccountBalance`     — Starting Balance + realized today
+//   * `deriveRedTradesToday`            — count of today's losing closes
+//
 // Account balance helpers. StandFast keeps the trader's configured account
 // size — the "Starting Balance" — as the fixed session baseline that
 // `riskRules.accountSize` represents. The live "Current Balance" the
@@ -46,4 +57,16 @@ export function deriveCurrentAccountBalance(
   closedTrades: ClosedTrade[],
 ): number {
   return startingBalance + deriveRealizedPnLToday(closedTrades);
+}
+
+// Count of trades that closed as a loss TODAY (local clock). Replaces
+// the cached `sessionMetrics.redTradesToday` counter at validation
+// read sites so a session that didn't roll cleanly across midnight
+// can't carry yesterday's losses into today's "red-trade limit"
+// warning. Matches the `isToday` semantic used for `pnLToday` so all
+// today-scoped surfaces agree on the day boundary.
+export function deriveRedTradesToday(closedTrades: ClosedTrade[]): number {
+  return closedTrades.filter(
+    (t) => isToday(t.closedAt) && t.outcome === "loss",
+  ).length;
 }

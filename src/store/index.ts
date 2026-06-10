@@ -230,6 +230,8 @@ export const useAppStore = create<AppStore>()(
       _hasHydrated: false,
       _setHasHydrated: (hydrated) =>
         set(() => ({ _hasHydrated: hydrated })),
+      userId: null,
+      _setUserId: (userId) => set(() => ({ userId })),
     }),
     {
       name: SF_STORAGE_KEYS.appState,
@@ -350,4 +352,88 @@ export function resetAppState() {
   }));
   // Simplest reliable path: rebuild the entire store. Forces re-hydrate.
   useAppStore.setState(useAppStore.getInitialState(), true);
+}
+
+// Server hydration. Called once on the client by <StoreHydrator> right after
+// the dashboard server component fetches the seed payload. Each non-null
+// field on the payload overlays the corresponding slice; missing/empty
+// fields leave the persisted local state alone.
+//
+// Server is the source of truth — if a row exists on the server, its shape
+// wins over whatever the local cache had. The sync queue's pending writes
+// flush after this, so any local-only edits that hadn't reached the server
+// yet get pushed up.
+import type { ServerSeedPayload } from "@/lib/sync/hydrate";
+import {
+  behaviorEventMapper,
+  dailyReflectionMapper,
+  interventionMapper,
+  monitoringEventMapper,
+  profileMapper,
+  riskRulesMapper,
+  sessionNoteMapper,
+  tradeMapper,
+  tradeReflectionMapper,
+  tradingSessionMapper,
+} from "@/lib/sync/mappers";
+
+export function hydrateFromServer(seed: ServerSeedPayload) {
+  useAppStore.setState((state) => {
+    const patch: Partial<AppStore> = {};
+
+    if (seed.profile) {
+      patch.user = profileMapper.fromRow(seed.profile);
+    }
+    if (seed.riskRules) {
+      patch.riskRules = riskRulesMapper.fromRow(seed.riskRules);
+    }
+    if (seed.sessions.length > 0) {
+      patch.sessions = seed.sessions.map((s) =>
+        tradingSessionMapper.fromRow(s),
+      );
+      patch.activeSessionId = seed.activeSession?.client_id ?? null;
+    }
+    if (seed.activeTrades.length > 0) {
+      patch.activeTrades = seed.activeTrades.map((r) =>
+        tradeMapper.tradeRowToActive(r),
+      );
+    }
+    if (seed.closedTrades.length > 0) {
+      patch.closedTrades = seed.closedTrades.map((r) =>
+        tradeMapper.tradeRowToClosed(r),
+      );
+    }
+    if (seed.behaviorEvents.length > 0) {
+      patch.behaviorEvents = seed.behaviorEvents.map((r) =>
+        behaviorEventMapper.fromRow(r),
+      );
+    }
+    if (seed.interventions.length > 0) {
+      patch.interventions = seed.interventions.map((r) =>
+        interventionMapper.fromRow(r),
+      );
+    }
+    if (seed.monitoringEvents.length > 0) {
+      patch.monitoringEvents = seed.monitoringEvents.map((r) =>
+        monitoringEventMapper.fromRow(r),
+      );
+    }
+    if (seed.reflections.length > 0) {
+      patch.reflections = seed.reflections.map((r) =>
+        dailyReflectionMapper.fromRow(r),
+      );
+    }
+    if (seed.tradeReflections.length > 0) {
+      patch.tradeReflections = seed.tradeReflections.map((r) =>
+        tradeReflectionMapper.fromRow(r),
+      );
+    }
+    if (seed.sessionNotes.length > 0) {
+      patch.sessionNotes = seed.sessionNotes.map((r) =>
+        sessionNoteMapper.fromRow(r),
+      );
+    }
+
+    return { ...state, ...patch };
+  });
 }

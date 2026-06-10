@@ -22,6 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store";
+import { applyOnboardingRisk } from "@/features/onboarding/lib/onboarding-persistence";
 import { PickCard } from "./pick-card";
 import { StepFooter } from "./step-footer";
 
@@ -70,7 +71,7 @@ export function RiskStep() {
   // picks the change up immediately.
   const storedAccountSize = useAppStore((s) => s.riskRules.accountSize);
   const hasHydrated = useAppStore((s) => s._hasHydrated);
-  const setAccountSize = useAppStore((s) => s.setAccountSize);
+  const saveRiskRules = useAppStore((s) => s.saveRiskRules);
 
   const [accountSizeText, setAccountSizeText] = useState(() =>
     formatCurrency(storedAccountSize > 0 ? storedAccountSize : 10_000),
@@ -107,22 +108,25 @@ export function RiskStep() {
     RISK_TOLERANCE_OPTIONS[1];
 
   function handleContinue() {
-    // Commit accountSize to the shared store before navigation so the
-    // Risk Rules page (and any other consumer of `riskRules.accountSize`)
-    // reflects what the user just entered. The other onboarding risk
-    // fields aren't persisted yet — they'll be wired up when their own
-    // sections on the Rules & Risk page need them.
-    setAccountSize(accountSize);
-    console.log("[onboarding] risk", {
-      accountSize,
-      riskTolerance,
-      riskPerTrade,
-      dailyLossLimit,
-      maxConsecutiveLosses,
-      maxDrawdown,
-      positionSizing,
-      additionalRules,
-    });
+    // Persist the full risk framework to the shared risk_rules the Trade Desk
+    // + validation engine read. Core numeric fields map to typed columns;
+    // risk tolerance, max drawdown, sizing method, and free-text rules go to
+    // market_config so nothing captured here is dropped.
+    saveRiskRules(
+      applyOnboardingRisk(useAppStore.getState().riskRules, {
+        accountSize,
+        riskPerTradePercent: riskPerTrade,
+        dailyLossPercent: dailyLossLimit,
+        maxConsecutiveLosses,
+        marketConfig: {
+          marketType: "Stocks",
+          riskTolerance,
+          maxDrawdownPercent: maxDrawdown,
+          positionSizing,
+          additionalRules,
+        },
+      }),
+    );
     router.push("/onboarding/platform");
   }
 

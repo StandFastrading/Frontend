@@ -35,6 +35,11 @@ export type AppStore = UserSlice &
     // flicker (saved value differs from server-rendered default).
     _hasHydrated: boolean;
     _setHasHydrated: (hydrated: boolean) => void;
+    // The Supabase auth user id for the signed-in user. Set by <StoreHydrator>
+    // after server seed fetch. Null when no session — slice actions key off
+    // this to decide whether to enqueue server writes.
+    userId: string | null;
+    _setUserId: (userId: string | null) => void;
   };
 
 export type SliceCreator<T> = StateCreator<

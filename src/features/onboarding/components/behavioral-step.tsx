@@ -39,6 +39,8 @@ import {
 
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useAppStore } from "@/store";
+import { buildBehavioralBaseline } from "@/features/onboarding/lib/onboarding-persistence";
 import { Callout } from "./callout";
 import { PickCard } from "./pick-card";
 import { StepFooter } from "./step-footer";
@@ -94,6 +96,7 @@ type CustomTrigger = { id: string; label: string };
 
 export function BehavioralStep() {
   const router = useRouter();
+  const patchUserProfile = useAppStore((s) => s.patchUserProfile);
   const [mindset, setMindset] = useState<string | null>(null);
   const [risk, setRisk] = useState<string | null>(null);
   const [triggers, setTriggers] = useState<Set<string>>(new Set());
@@ -128,11 +131,13 @@ export function BehavioralStep() {
   }
 
   function handleContinue() {
-    console.log("[onboarding] behavioral", {
-      mindset,
-      risk,
-      triggers: Array.from(triggers),
-      customTriggers,
+    patchUserProfile({
+      behavioralBaseline: buildBehavioralBaseline({
+        mindset,
+        riskTolerance: risk,
+        triggers: Array.from(triggers),
+        customTriggers,
+      }),
     });
     router.push("/onboarding/risk");
   }

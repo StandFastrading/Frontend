@@ -44,7 +44,7 @@ export default function StepsLayout({
       <aside className="hidden flex-col gap-8 border-r border-white/[0.06] bg-[#070c1a]/95 p-6 lg:flex">
         <div className="flex items-center">
           <Image
-            src="/standfast-logo.svg"
+            src="/logo/standfast-logo.svg"
             alt="StandFast Technologies"
             width={170}
             height={48}

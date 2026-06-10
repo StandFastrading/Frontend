@@ -16,7 +16,6 @@ import { cn } from "@/lib/utils";
 
 import { loginSchema, type LoginInput } from "../schemas";
 import { signInWithPassword } from "../api";
-import { setMockSession } from "../mock-session";
 
 const fieldClass =
   "h-11 border-white/15 bg-input/40 text-base text-foreground placeholder:text-muted-foreground/60 focus-visible:border-brand focus-visible:ring-brand/30";
@@ -49,12 +48,7 @@ export function LoginForm({
 
   return (
     <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        setMockSession();
-        router.push(next);
-        router.refresh();
-      }}
+      onSubmit={form.handleSubmit((values) => mutation.mutate(values))}
       className="flex flex-col gap-5"
       noValidate
     >

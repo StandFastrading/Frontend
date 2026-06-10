@@ -30,7 +30,7 @@ src/
 │   └── index.ts                      (barrel)
 │
 ├── lib/storage/                      ← persistence helpers (storage I/O)
-│   ├── storage-keys.ts               (SF_STORAGE_KEYS, SF_COOKIE_NAMES)
+│   ├── storage-keys.ts               (SF_STORAGE_KEYS)
 │   ├── persistence.ts                (saveState, loadState, clearState, resetDemoData)
 │   └── index.ts                      (barrel)
 │

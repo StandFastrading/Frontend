@@ -52,6 +52,12 @@ const CONTACTS = [
   { name: "Angel Williams", email: "angelw1014.pmtsh@gmail.com", phase: 2 },
   { name: "Skyler", email: "skyisdrunk@yahoo.com", phase: 2 },
   { name: "Joshua Davis", email: "joshuad20065@gmail.com", phase: 2 },
+  { name: "Jayden", email: "jay.athlete.09@gmail.com", phase: 2 },
+  { name: "Leon Williams", email: "williamsleon76@gmail.com", phase: 2 },
+  { name: "Tyler Carrick", email: "tyler.carrick07@gmail.com", phase: 2 },
+  { name: "Peter Philips", email: "ptphilips@gmail.com", phase: 2 },
+  { name: "Tony Black", email: "thetraderfarm@gmail.com", phase: 2 },
+  { name: "Damien", email: "jbeatz2007@gmail.com", phase: 2 },
 ];
 
 async function createUser(contact) {

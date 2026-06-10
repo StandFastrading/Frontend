@@ -22,7 +22,7 @@ export function WelcomeStep() {
   return (
     <div className="flex w-full max-w-md flex-col items-center gap-8">
       <Image
-        src="/standfast-logo.svg"
+        src="/logo/standfast-logo.svg"
         alt="Standfast Technologies"
         width={280}
         height={80}

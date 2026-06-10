@@ -13,6 +13,7 @@ export const ROUTES = {
   accountSecurity: "/account/security",
   accountBilling: "/account/billing",
   onboarding: "/onboarding",
+  onboardingMarket: "/onboarding/market",
   docs: "/docs",
   privacy: "/privacy",
   terms: "/terms",

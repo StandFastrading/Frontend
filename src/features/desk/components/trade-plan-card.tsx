@@ -2,16 +2,20 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  MARKET_OPTIONS,
-  SETUP_OPTIONS,
-} from "@/features/desk/mock-data";
+import { MARKET_OPTIONS } from "@/features/desk/mock-data";
 import type {
   Direction,
   MarketType,
   TradeInput,
 } from "@/features/desk/types";
 import { cn } from "@/lib/utils";
+import { useAppStore } from "@/store";
+
+// "Other / Custom" is always offered so traders can log off-script trades.
+// It is intentionally not part of allowedSetups (even if you onboarded with
+// it) so it trips the "Setup not in approved list" warning in
+// trade-validation-engine.ts — that warning is the whole point.
+const OTHER_CUSTOM = "Other / Custom";
 
 type Props = {
   input: TradeInput;
@@ -41,6 +45,12 @@ function valueOrEmpty(value: number | null): string {
 }
 
 export function TradePlanCard({ input, onChange }: Props) {
+  const allowedSetups = useAppStore((s) => s.riskRules.allowedSetups);
+  const setupOptions = [
+    ...allowedSetups.filter((s) => s !== OTHER_CUSTOM),
+    OTHER_CUSTOM,
+  ];
+
   return (
     <div className="flex flex-col gap-5 rounded-xl border border-white/15 bg-card/60 p-5 backdrop-blur">
       <div className="flex items-center justify-between">
@@ -157,7 +167,7 @@ export function TradePlanCard({ input, onChange }: Props) {
             <option value="" style={OPTION_STYLE}>
               Select setup…
             </option>
-            {SETUP_OPTIONS.map((s) => (
+            {setupOptions.map((s) => (
               <option key={s} value={s} style={OPTION_STYLE}>
                 {s}
               </option>

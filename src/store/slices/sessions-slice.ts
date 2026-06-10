@@ -1,4 +1,8 @@
 import {
+  enqueueSync,
+  tradingSessionMapper,
+} from "@/lib/sync";
+import {
   buildSession,
   getCurrentTradingDate,
   getDefaultSessionMetrics,
@@ -16,6 +20,30 @@ function notFromToday<T extends { tradingDate?: string }>(today: string) {
   return (record: T) => record.tradingDate !== today;
 }
 
+function syncSessionUpsert(session: TradingSession, userId: string | null) {
+  if (!userId) return;
+  enqueueSync({
+    table: "trading_sessions",
+    op: "upsert",
+    payload: tradingSessionMapper.toUpsert(session, userId),
+    onConflict: "user_id,client_id",
+  });
+}
+
+function syncSessionUpdate(
+  sessionId: string,
+  patch: Partial<TradingSession>,
+  userId: string | null,
+) {
+  if (!userId) return;
+  enqueueSync({
+    table: "trading_sessions",
+    op: "update",
+    payload: tradingSessionMapper.toUpdate(patch),
+    match: { user_id: userId, client_id: sessionId },
+  });
+}
+
 // Sessions slice. Owns the daily trading-session boundary system.
 //
 // Two pieces of state live here:
@@ -29,48 +57,22 @@ function notFromToday<T extends { tradingDate?: string }>(today: string) {
 // reset those counters here. Historical metrics are NOT deleted —
 // `behaviorEvents`, `closedTrades`, `monitoringEvents`, `interventions`
 // stay intact; current-session views filter by `sessionId` instead.
+//
+// Server sync: every session create / status change upserts/updates the
+// `trading_sessions` row. UNIQUE on (user_id, client_id) makes retries safe.
 
 export type SessionsSlice = {
   sessions: TradingSession[];
   activeSessionId: string | null;
 
-  // Helpers. Pure functions over slice state, exposed as methods so
-  // non-React callers (other slice actions, persistence migrations) can
-  // call them without a hook. React components should prefer the hooks
-  // in `@/lib/sessions/session-helpers` so reads are memoized.
-  // `opts.preserveDeskState` skips the default behavior of wiping
-  // `tradeInput` / `validation` / `hasCheckedTrade` / `approvedSnapshot` /
-  // modal state. Default (omitted) preserves the user-triggered "Start
-  // New Session" semantic: explicit fresh slate. Automatic boundary
-  // rollovers from `ensureSessionForToday` pass `preserveDeskState: true`
-  // so a mid-form midnight crossing doesn't lose the trader's in-flight
-  // plan before validation gets a chance to run.
   startNewSession: (
     type?: SessionType,
     customLabel?: string | null,
     opts?: { preserveDeskState?: boolean },
   ) => void;
   closeCurrentSession: () => void;
-  // Change the type label on the active session without resetting metrics
-  // or creating a new session. Used by the dashboard header dropdown.
   setSessionType: (type: SessionType, customLabel?: string | null) => void;
-  // Idempotent ensure-active-for-today. Called from `onRehydrateStorage`
-  // (default semantics: clean slate when rolling) AND from the top of
-  // every Trade Desk / Active Trade Monitoring action (semantics:
-  // `preserveDeskState: true` — roll the session but keep whatever the
-  // trader was typing). If there's no active session OR the active
-  // session belongs to a previous calendar day, the stale session is
-  // closed and a fresh one starts.
   ensureSessionForToday: (opts?: { preserveDeskState?: boolean }) => void;
-
-  // [TEMPORARY · DEV-ONLY] Wipes today's session-scoped records so the
-  // Behavioral State Aggregator can be tested from a clean baseline.
-  // Drops all active trades + every record stamped with today's
-  // tradingDate (behaviorEvents, monitoringEvents, interventions,
-  // closedTrades), then rolls a fresh session boundary. Preserves user
-  // profile, onboarding, risk rules, allowed setups, and prior days'
-  // history. This action is NOT a long-term feature — remove before
-  // shipping to production.
   resetTodaysSession: () => void;
 };
 
@@ -82,14 +84,19 @@ export const createSessionsSlice: SliceCreator<SessionsSlice> = (
   activeSessionId: null,
 
   startNewSession: (type = "regular", customLabel = null, opts = {}) => {
+    const prevActiveId = get().activeSessionId;
+    const userId = get().userId;
+    const closedAt = new Date().toISOString();
+    let newSession: TradingSession | null = null;
     set((state) => {
       // Close the existing active session if there is one.
       const closedSessions = state.sessions.map((s) =>
         s.sessionId === state.activeSessionId
-          ? { ...s, status: "closed" as const, endedAt: new Date().toISOString() }
+          ? { ...s, status: "closed" as const, endedAt: closedAt }
           : s,
       );
       const next = buildSession(type, customLabel);
+      newSession = next;
       // Trade Desk in-flight state. Cleared by default (user-triggered
       // "Start New Session" wants a clean slate). Skipped when the
       // caller passes `preserveDeskState: true` — that's the automatic
@@ -116,19 +123,36 @@ export const createSessionsSlice: SliceCreator<SessionsSlice> = (
         ...deskClear,
       };
     });
+    // After the local mutation, sync the prior-close + new-insert separately.
+    if (prevActiveId) {
+      syncSessionUpdate(
+        prevActiveId,
+        { status: "closed", endedAt: closedAt },
+        userId,
+      );
+    }
+    if (newSession) {
+      syncSessionUpsert(newSession, userId);
+    }
   },
 
   closeCurrentSession: () => {
     const activeId = get().activeSessionId;
     if (!activeId) return;
+    const closedAt = new Date().toISOString();
     set((state) => ({
       sessions: state.sessions.map((s) =>
         s.sessionId === activeId
-          ? { ...s, status: "closed" as const, endedAt: new Date().toISOString() }
+          ? { ...s, status: "closed" as const, endedAt: closedAt }
           : s,
       ),
       activeSessionId: null,
     }));
+    syncSessionUpdate(
+      activeId,
+      { status: "closed", endedAt: closedAt },
+      get().userId,
+    );
   },
 
   setSessionType: (type, customLabel = null) => {
@@ -145,6 +169,14 @@ export const createSessionsSlice: SliceCreator<SessionsSlice> = (
           : s,
       ),
     }));
+    syncSessionUpdate(
+      activeId,
+      {
+        sessionType: type,
+        customLabel: type === "custom" ? customLabel : null,
+      },
+      get().userId,
+    );
   },
 
   ensureSessionForToday: (opts = {}) => {
@@ -166,16 +198,8 @@ export const createSessionsSlice: SliceCreator<SessionsSlice> = (
   },
 
   // [TEMPORARY · DEV-ONLY]
-  // Wipes today's session-scoped event log + open positions, then rolls a
-  // fresh session boundary. Two-phase mutation:
-  //   1. Filter today's tradingDate out of every event collection +
-  //      empty the activeTrades list outright (open positions are by
-  //      definition "today's" exposure).
-  //   2. Call startNewSession() to reset session metrics + Trade Desk
-  //      in-flight state + create the new session record.
-  // Preserves: user, onboarding, riskRules, allowedSetups, sessions[]
-  // (the historical session log itself), and any prior-day records that
-  // carry a tradingDate other than today's.
+  // Wipes today's session-scoped event log + open positions locally. Does
+  // NOT cascade to the server — use a future delete-account RPC for that.
   resetTodaysSession: () => {
     const today = getCurrentTradingDate();
     const isToday = notFromToday(today);
@@ -186,8 +210,6 @@ export const createSessionsSlice: SliceCreator<SessionsSlice> = (
       monitoringEvents: state.monitoringEvents.filter(isToday),
       interventions: state.interventions.filter(isToday),
     }));
-    // Rolls the session boundary, resets SessionMetrics defaults, and
-    // clears Trade Desk in-flight form/validation/snapshot state.
     get().startNewSession();
   },
 });

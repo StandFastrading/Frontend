@@ -19,6 +19,10 @@ import { cn } from "@/lib/utils";
 import { Callout } from "./callout";
 import { StepFooter } from "./step-footer";
 
+import { useAppStore } from "@/store";
+import { applyOnboardingRisk } from "@/features/onboarding/lib/onboarding-persistence";
+import { AccountSizeField, useAccountSizeField } from "./account-size-field";
+
 type ExpirationRule = {
   id: string;
   label: string;
@@ -63,6 +67,8 @@ const DEFAULT_RULES = new Set(["no-earnings", "no-revenge", "auto-cooldown"]);
 
 export function OptionsRiskStep() {
   const router = useRouter();
+  const saveRiskRules = useAppStore((s) => s.saveRiskRules);
+  const account = useAccountSizeField();
 
   const [riskPerTrade, setRiskPerTrade] = useState(1.0);
   const [dailyLoss, setDailyLoss] = useState(3.0);
@@ -82,15 +88,22 @@ export function OptionsRiskStep() {
   }
 
   function handleContinue() {
-    console.log("[onboarding] options.risk", {
-      riskPerTrade,
-      dailyLoss,
-      maxContracts,
-      maxOpenPositions,
-      maxReentries,
-      weeklyDrawdown,
-      rules: Array.from(rules),
-    });
+    saveRiskRules(
+      applyOnboardingRisk(useAppStore.getState().riskRules, {
+        accountSize: account.accountSize,
+        riskPerTradePercent: riskPerTrade,
+        dailyLossPercent: dailyLoss,
+        maxPositionSize: maxContracts,
+        maxOpenPositions,
+        marketConfig: {
+          marketType: "Options",
+          instrumentUnit: "contracts",
+          maxReentries,
+          weeklyDrawdownPercent: weeklyDrawdown,
+          selectedRuleIds: Array.from(rules),
+        },
+      }),
+    );
     router.push("/onboarding/complete");
   }
 
@@ -107,6 +120,13 @@ export function OptionsRiskStep() {
           Define the boundaries that protect your capital.
         </p>
       </div>
+
+      <AccountSizeField
+        label="Account Size"
+        text={account.text}
+        onChange={account.setText}
+        onBlur={account.reformat}
+      />
 
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
         <MetricCard
@@ -312,6 +332,7 @@ export function OptionsRiskStep() {
         currentNum={6}
         onContinue={handleContinue}
         continueLabel="Finalize Onboarding"
+        continueDisabled={account.accountSize <= 0}
       />
     </div>
   );

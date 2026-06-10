@@ -244,8 +244,13 @@ export function computeSessionIntelligence(
   const cleanOpenTrades = activeOpen.filter((t) => {
     if (t.approvalStatus === "approved_with_warnings") return false;
     if (t.mistakeFlagged) return false;
+    // Only penalizing (non-info) deviations break a clean open trade.
+    // Info-severity signals like stop_tightened (risk reduction) stay in the
+    // monitoring history but are neutral, not rule violations.
     const hasDeviation = monitoringEvents.some(
-      (e) => e.tradeId === t.id && e.deviations.length > 0,
+      (e) =>
+        e.tradeId === t.id &&
+        e.deviations.some((d) => d.severity !== "info"),
     );
     return !hasDeviation;
   }).length;

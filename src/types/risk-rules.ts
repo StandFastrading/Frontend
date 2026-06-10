@@ -61,6 +61,12 @@ export const riskRulesSchema = z.object({
   reflectionPromptAfterOverride: z.boolean(),
   lockoutAfterMaxLoss: z.boolean(),
 
+  // Per-market extras with no structured column above (instrument unit,
+  // market-specific caps like max-same-direction / weekly drawdown, raw
+  // onboarding rule-toggle ids). Core risk values stay in the typed fields
+  // so the Trade Desk + validation engine read path is unchanged.
+  marketConfig: z.record(z.string(), z.unknown()).default({}),
+
   // Updated timestamp (null until first save)
   updatedAt: z.string().nullable(),
 });
@@ -109,6 +115,8 @@ export function getDefaultRiskRules(): RiskRules {
     requireConfirmationBeforeOverride: true,
     reflectionPromptAfterOverride: true,
     lockoutAfterMaxLoss: true,
+
+    marketConfig: {},
 
     updatedAt: null,
   };

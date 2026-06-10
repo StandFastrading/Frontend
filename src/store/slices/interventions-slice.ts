@@ -1,3 +1,4 @@
+import { enqueueSync, interventionMapper } from "@/lib/sync";
 import { stampWithActiveSession } from "@/lib/sessions/session-stamp";
 import type { InterventionEvent } from "@/types";
 import type { SliceCreator } from "@/store/types";
@@ -5,6 +6,9 @@ import type { SliceCreator } from "@/store/types";
 // Focused stream of intervention outcomes (modal Continue/Revise/Cancel).
 // Narrower than the full behavior event log; lets Behavior Analytics score
 // override rates without re-filtering every event.
+//
+// Server sync: every append also inserts into `interventions` (append-only,
+// no UPDATE/DELETE policy). Retries are safe via (user_id, client_id).
 
 export type InterventionsSlice = {
   interventions: InterventionEvent[];
@@ -14,14 +18,25 @@ export type InterventionsSlice = {
 
 export const createInterventionsSlice: SliceCreator<InterventionsSlice> = (
   set,
+  get,
 ) => ({
   interventions: [],
-  appendIntervention: (event) =>
-    set((state) => ({
-      interventions: [
-        stampWithActiveSession(state, event),
-        ...state.interventions,
-      ],
-    })),
+  appendIntervention: (event) => {
+    let stamped: InterventionEvent | null = null;
+    set((state) => {
+      stamped = stampWithActiveSession(state, event);
+      return {
+        interventions: [stamped, ...state.interventions],
+      };
+    });
+    const userId = get().userId;
+    if (userId && stamped) {
+      enqueueSync({
+        table: "interventions",
+        op: "insert",
+        payload: interventionMapper.toInsert(stamped, userId),
+      });
+    }
+  },
   clearInterventions: () => set(() => ({ interventions: [] })),
 });

@@ -24,7 +24,9 @@ import {
   Zap,
 } from "lucide-react";
 
+import { FOREX_SETUP_LIBRARY } from "@/features/onboarding/forex-setups-data";
 import { cn } from "@/lib/utils";
+import { useAppStore } from "@/store";
 import { Callout } from "./callout";
 import {
   ForexSetupLibrary,
@@ -75,6 +77,8 @@ const MEAN_REVERSION: Setup[] = [
 
 export function ForexSetupsStep() {
   const router = useRouter();
+  const riskRules = useAppStore((s) => s.riskRules);
+  const saveRiskRules = useAppStore((s) => s.saveRiskRules);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [customSetups, setCustomSetups] = useState<CustomSetup[]>([]);
@@ -100,10 +104,31 @@ export function ForexSetupsStep() {
   }
 
   function handleContinue() {
-    console.log("[onboarding] forex.setups", {
-      selected: Array.from(selected),
-      customSetups,
-    });
+    // Persist selected setups into riskRules.allowedSetups so the Trade Desk
+    // validation engine has something to match against.
+    const idToLabel = new Map<string, string>();
+    for (const s of [
+      ...PRICE_ACTION,
+      ...LIQUIDITY,
+      ...MOMENTUM,
+      ...MEAN_REVERSION,
+    ]) {
+      idToLabel.set(s.id, s.label);
+    }
+    for (const cat of FOREX_SETUP_LIBRARY) {
+      for (const s of cat.setups) idToLabel.set(s.id, s.label);
+    }
+    for (const s of customSetups) idToLabel.set(s.id, s.label);
+
+    const selectedLabels = Array.from(selected)
+      .map((id) => idToLabel.get(id))
+      .filter((label): label is string => Boolean(label));
+    // Merge (not replace) — see setups-step.tsx for rationale.
+    const allowedSetups = Array.from(
+      new Set([...riskRules.allowedSetups, ...selectedLabels]),
+    );
+
+    saveRiskRules({ ...riskRules, allowedSetups });
     router.push("/onboarding/forex/behavioral");
   }
 

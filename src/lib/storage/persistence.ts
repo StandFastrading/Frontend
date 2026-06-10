@@ -1,5 +1,4 @@
 import {
-  ALL_SF_COOKIE_NAMES,
   ALL_SF_STORAGE_KEYS,
   type SfStorageKey,
 } from "@/lib/storage/storage-keys";
@@ -37,26 +36,19 @@ export function clearState(key: SfStorageKey | string): void {
   }
 }
 
-function clearCookie(name: string) {
-  if (typeof document === "undefined") return;
-  document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
-}
-
-// Demo-reset wipes every SF-owned localStorage key + mock-session cookie.
-// Intended for the "Reset Demo" affordance, not user-facing sign-out.
+// Demo-reset wipes every SF-owned localStorage key. Intended for the dev
+// "Reset Local Data" affordance. Does not touch Supabase sb-* keys — let
+// supabase.auth.signOut() handle its own session cleanup.
 export function resetDemoData(): void {
   for (const key of ALL_SF_STORAGE_KEYS) clearState(key);
-  for (const name of ALL_SF_COOKIE_NAMES) clearCookie(name);
 }
 
 // Factory reset for test data — sweeps EVERY localStorage key that starts
 // with the `sf_` prefix, including legacy keys we may have forgotten to
-// enumerate in `ALL_SF_STORAGE_KEYS`. Deliberately does NOT touch cookies
-// or non-`sf_` keys, so:
-//   * `sf_mock_session` + `sf_mock_onboarded` cookies stay → user stays
-//     signed in and isn't re-routed through onboarding.
-//   * Supabase `sb-*` localStorage + cookies stay untouched → real auth
-//     sessions aren't disturbed.
+// enumerate in `ALL_SF_STORAGE_KEYS`. Deliberately does NOT touch non-`sf_`
+// keys, so:
+//   * Supabase `sb-*` localStorage stays untouched → the user's auth session
+//     survives a local-data wipe.
 //   * Any other vendor key (analytics, feature flags) is left alone.
 //
 // Returns the list of removed keys so the caller can log them for

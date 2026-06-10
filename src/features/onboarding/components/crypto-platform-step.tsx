@@ -4,16 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity,
-  ArrowRight,
   Bitcoin,
+  Clock,
   Coins,
   Crown,
   Hexagon,
   LineChart,
   Lock,
   Plus,
-  Search,
-  Shield,
   TrendingUp,
   Wallet,
   Waves,
@@ -34,6 +32,12 @@ type Platform = {
 };
 
 const PLATFORMS: Platform[] = [
+  {
+    id: "none",
+    label: "Not connecting yet",
+    description: "Exchange integrations are coming later.",
+    icon: Clock,
+  },
   {
     id: "binance",
     label: "Binance",
@@ -107,15 +111,15 @@ const PLATFORMS: Platform[] = [
 
 export function CryptoPlatformStep() {
   const router = useRouter();
-  const [primary, setPrimary] = useState<string>("binance");
+  const [primary, setPrimary] = useState<string>("none");
   const [extras, setExtras] = useState<Set<string>>(new Set());
   const [customPlatformName, setCustomPlatformName] = useState("");
 
   const primaryIsOther = primary === "other-platform";
 
-  const valid =
-    primary !== "" &&
-    (!primaryIsOther || customPlatformName.trim() !== "");
+  // Optional step: continue is always allowed. Only require a name when the
+  // tester has explicitly picked "Other" (otherwise the field is meaningless).
+  const valid = !primaryIsOther || customPlatformName.trim() !== "";
 
   function toggleExtra(id: string) {
     setExtras((prev) => {
@@ -139,18 +143,19 @@ export function CryptoPlatformStep() {
     <div className="flex flex-1 flex-col gap-5">
       <div className="flex flex-col gap-2">
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-400">
-          Step 7 of 7
+          Step 7 of 7 · Optional
         </p>
         <h1 className="font-heading text-3xl font-bold tracking-tight text-white sm:text-4xl">
           Platform &amp; Exchange
         </h1>
         <p className="text-sm leading-relaxed text-slate-300">
-          Connect the tools you use to trade crypto. We&apos;ll sync your data
-          securely to power your insights.
+          Future integration — optional for the beta. StandFast doesn&apos;t
+          connect to your exchange yet, so nothing here links to your account.
+          Tell us what you use if you like, or just continue.
         </p>
       </div>
 
-      <NumberedSection num={1} title="Choose your primary platform">
+      <NumberedSection num={1} title="Your primary platform (optional)">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {PLATFORMS.map((p) => {
             const isSelected = primary === p.id;
@@ -191,36 +196,18 @@ export function CryptoPlatformStep() {
           />
         )}
 
-        <div className="flex flex-col items-start justify-between gap-2 pt-1 sm:flex-row sm:items-center">
-          <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
-            <Lock className="size-3" />
-            We use read-only API keys. Withdrawals are never enabled.
-          </p>
-          <button
-            type="button"
-            className="flex items-center gap-1 text-[11px] font-semibold text-cyan-300 hover:text-cyan-200"
-          >
-            Learn more about security
-            <ArrowRight className="size-3" />
-          </button>
-        </div>
+        <p className="flex items-center gap-1.5 pt-1 text-[11px] text-slate-400">
+          <Lock className="size-3" />
+          Nothing connects to your account during the beta — this just records
+          what you trade with.
+        </p>
       </NumberedSection>
 
-      <NumberedSection
-        num={2}
-        title="Connect additional exchanges (optional)"
-        headerRight={
-          <button
-            type="button"
-            className="flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-cyan-300"
-          >
-            Don&apos;t see your exchange? Search all
-            <Search className="size-3" />
-          </button>
-        }
-      >
+      <NumberedSection num={2} title="Additional exchanges (optional)">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {PLATFORMS.filter((p) => p.id !== "other-platform").map((p) => {
+          {PLATFORMS.filter(
+            (p) => p.id !== "other-platform" && p.id !== "none",
+          ).map((p) => {
             const isSelected = extras.has(p.id);
             const isPrimary = primary === p.id;
             return (
@@ -253,19 +240,10 @@ export function CryptoPlatformStep() {
           })}
         </div>
 
-        <div className="flex flex-col items-start justify-between gap-2 pt-1 sm:flex-row sm:items-center">
-          <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
-            <Shield className="size-3" />
-            We support 30+ exchanges and on-chain wallets.
-          </p>
-          <button
-            type="button"
-            className="flex items-center gap-1 text-[11px] font-semibold text-cyan-300 hover:text-cyan-200"
-          >
-            View all supported exchanges
-            <ArrowRight className="size-3" />
-          </button>
-        </div>
+        <p className="flex items-center gap-1.5 pt-1 text-[11px] text-slate-400">
+          <Clock className="size-3" />
+          Exchange and wallet integrations are coming after the beta.
+        </p>
       </NumberedSection>
 
       <StepFooter

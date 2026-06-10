@@ -15,5 +15,6 @@ export const dashboardNav: NavItem[] = [
   { label: "Trade History", href: ROUTES.trades, icon: "History" },
   { label: "Reports", href: ROUTES.reports, icon: "FileText" },
   { label: "Calendar", href: ROUTES.calendar, icon: "Calendar" },
+  { label: "Onboarding", href: ROUTES.onboardingMarket, icon: "Compass" },
   { label: "Settings", href: ROUTES.account, icon: "Settings" },
 ];

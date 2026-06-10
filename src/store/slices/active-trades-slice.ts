@@ -2,6 +2,8 @@ import { BEHAVIOR_EVENT_TYPES } from "@/lib/behavior-events";
 import { detectDeviations } from "@/lib/monitoring/behavior-deviation-engine";
 import { deriveCurrentAccountBalance } from "@/lib/sessions/account-balance";
 import { stampWithActiveSession } from "@/lib/sessions/session-stamp";
+import { enqueueSync, tradeMapper } from "@/lib/sync";
+import { getCurrentTradingDate } from "@/types";
 import type {
   ActiveTrade,
   ActiveTradeExitOutcome,
@@ -14,6 +16,51 @@ import type {
   TargetMoveReason,
 } from "@/types";
 import type { SliceCreator } from "@/store/types";
+
+// Sync helpers — every active-trade mutation flows through one of these so
+// the server's `trades` row stays consistent with the local view. UPSERT on
+// inserts (so retries land on the same row), UPDATE on incremental edits.
+
+function syncActiveTradeUpsert(
+  trade: ActiveTrade,
+  userId: string | null,
+  tradingDate: string,
+) {
+  if (!userId) return;
+  enqueueSync({
+    table: "trades",
+    op: "upsert",
+    payload: tradeMapper.activeTradeToInsert(trade, userId, tradingDate),
+    onConflict: "user_id,client_id",
+  });
+}
+
+function syncActiveTradeUpdate(
+  trade: ActiveTrade,
+  userId: string | null,
+) {
+  if (!userId) return;
+  enqueueSync({
+    table: "trades",
+    op: "update",
+    payload: tradeMapper.activeTradeToUpdate(trade),
+    match: { user_id: userId, client_id: trade.id },
+  });
+}
+
+function syncClosedTradeUpsert(
+  trade: ClosedTrade,
+  userId: string | null,
+  tradingDate: string,
+) {
+  if (!userId) return;
+  enqueueSync({
+    table: "trades",
+    op: "upsert",
+    payload: tradeMapper.closedTradeToInsert(trade, userId, tradingDate),
+    onConflict: "user_id,client_id",
+  });
+}
 
 // Trades the trader has confirmed they entered + the action thunks that
 // mutate them. Every action routes through the Behavior Deviation Engine —
@@ -187,7 +234,13 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
       metadata: {
         tradeId: trade.id,
         updateType: update.type,
-        deviationCount: engineOutput.deviations.length,
+        // Penalty count excludes info-severity deviations (e.g. stop_tightened
+        // — a risk-reducing move). Those are recorded on the monitoring event
+        // for history/analytics, but they are not departures from the plan and
+        // must not count as rule violations.
+        deviationCount: engineOutput.deviations.filter(
+          (d) => d.severity !== "info",
+        ).length,
       },
     };
     get().appendBehaviorEvent(feedEvent);
@@ -196,45 +249,38 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
   }
 
   // Convenience helper: write back a mutated trade record into activeTrades.
+  // Also enqueues a server-side update so the local view + Supabase agree.
   function replaceTrade(updated: ActiveTrade) {
     set((state) => ({
       activeTrades: state.activeTrades.map((t) =>
         t.id === updated.id ? updated : t,
       ),
     }));
+    syncActiveTradeUpdate(updated, get().userId);
   }
 
   return {
     activeTrades: [],
-    appendActiveTrade: (trade) =>
-      set((state) => {
-        const stamped = stampWithActiveSession(state, trade);
-        if (process.env.NODE_ENV === "development") {
-          console.log("[debug:activate] appendActiveTrade", {
-            inputTradeId: trade.id,
-            inputStatus: trade.status,
-            inputSessionId: trade.sessionId ?? null,
-            inputTradingDate: trade.tradingDate ?? null,
-            stateActiveSessionId: state.activeSessionId,
-            sessionsCount: state.sessions.length,
-            stateSessionIds: state.sessions.map((s) => ({
-              id: s.sessionId,
-              status: s.status,
-              tradingDate: s.tradingDate,
-            })),
-            stampedSessionId: stamped.sessionId ?? null,
-            stampedTradingDate: stamped.tradingDate ?? null,
-            stampedStatus: stamped.status,
-            stampApplied:
-              (stamped.sessionId ?? null) !== (trade.sessionId ?? null),
-            activeTradesBefore: state.activeTrades.length,
-            activeTradesAfter: state.activeTrades.length + 1,
-          });
-        }
-        return {
-          activeTrades: [stamped, ...state.activeTrades],
-        };
-      }),
+    appendActiveTrade: (trade) => {
+      const stamped = stampWithActiveSession(get(), trade);
+      if (process.env.NODE_ENV === "development") {
+        console.log("[debug:activate] appendActiveTrade", {
+          inputTradeId: trade.id,
+          inputStatus: trade.status,
+          inputSessionId: trade.sessionId ?? null,
+          stampedSessionId: stamped.sessionId ?? null,
+          stampedTradingDate: stamped.tradingDate ?? null,
+        });
+      }
+      set((state) => ({
+        activeTrades: [stamped, ...state.activeTrades],
+      }));
+      syncActiveTradeUpsert(
+        stamped,
+        get().userId,
+        stamped.tradingDate ?? getCurrentTradingDate(),
+      );
+    },
     removeActiveTrade: (id) =>
       set((state) => ({
         activeTrades: state.activeTrades.filter((t) => t.id !== id),
@@ -445,8 +491,12 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
       const monitoringForTrade = get().monitoringEvents.filter(
         (e) => e.tradeId === trade.id,
       );
+      // Count only penalizing deviations — info-severity signals (e.g.
+      // stop_tightened, a risk-reducing move) stay on the monitoring record
+      // but are not plan departures, so they don't count as rule violations.
       const deviationCount = monitoringForTrade.reduce(
-        (n, e) => n + e.deviations.length,
+        (n, e) =>
+          n + e.deviations.filter((d) => d.severity !== "info").length,
         0,
       );
       const mistakeCount = monitoringForTrade.filter(
@@ -486,13 +536,18 @@ export const createActiveTradesSlice: SliceCreator<ActiveTradesSlice> = (
       // status filter). The active record is dropped outright; the closed
       // archive is the authoritative post-exit representation. The archive
       // also gets session-stamped on the way in.
+      const stampedArchive = stampWithActiveSession(get(), archived);
       set((state) => ({
         activeTrades: state.activeTrades.filter((t) => t.id !== trade.id),
-        closedTrades: [
-          stampWithActiveSession(state, archived),
-          ...state.closedTrades,
-        ],
+        closedTrades: [stampedArchive, ...state.closedTrades],
       }));
+      // Server sync: same `client_id` as the original active trade row →
+      // the upsert overwrites status='closed' + exit fields onto that row.
+      syncClosedTradeUpsert(
+        stampedArchive,
+        get().userId,
+        stampedArchive.tradingDate ?? getCurrentTradingDate(),
+      );
 
       // 3) Update session metrics. Every closed trade increments the
       //    daily counter; losses additionally bump red trades + the

@@ -12,6 +12,30 @@ import { StatTiles } from "@/features/dashboard/components/stat-tiles";
 import { TodaysObjective } from "@/features/dashboard/components/todays-objective";
 import { TodaysPatterns } from "@/features/dashboard/components/todays-patterns";
 import { WeeklyReview } from "@/features/dashboard/components/weekly-review";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+// Derive the trader's first name from auth metadata. Falls back through
+// `display_name` (mirrored on profiles via handle_new_user trigger), then
+// the email local-part, then the generic "Trader" greeting.
+function firstNameFrom(user: {
+  user_metadata?: { full_name?: string; display_name?: string };
+  email?: string | null;
+}): string {
+  const full =
+    (user.user_metadata?.full_name as string | undefined) ??
+    (user.user_metadata?.display_name as string | undefined) ??
+    "";
+  const trimmed = full.trim();
+  if (trimmed.length > 0) {
+    return trimmed.split(/\s+/)[0];
+  }
+  const emailLocal = user.email?.split("@")[0] ?? "";
+  if (emailLocal.length > 0) {
+    // Capitalize the first character so "cruzh5150" reads as "Cruzh5150".
+    return emailLocal[0].toUpperCase() + emailLocal.slice(1);
+  }
+  return "Trader";
+}
 
 // Vertical rhythm:
 //   gap-5  → between major rows (premium breathing room, tightened from gap-6)
@@ -20,10 +44,16 @@ import { WeeklyReview } from "@/features/dashboard/components/weekly-review";
 // secondary tier so Reflection / Pre-Session Checklist / Today's Patterns
 // read as supportive context, not as peers of the live monitoring row.
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const firstName = user ? firstNameFrom(user) : "Trader";
+
   return (
     <div className="flex flex-col gap-5">
-      <DashboardHeader name="Trader" />
+      <DashboardHeader name={firstName} />
 
       {/* Tier 0 — Action-first surface:
             1. Today's Objective  — single behavioral focus for the session

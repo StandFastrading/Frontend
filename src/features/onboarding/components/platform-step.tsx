@@ -4,11 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity,
-  ArrowRight,
   BarChart3,
   Building2,
   CheckCircle2,
   ChevronRight,
+  Clock,
   Cloud,
   FileSpreadsheet,
   HardDrive,
@@ -18,12 +18,9 @@ import {
   Lock,
   Mountain,
   Plus,
-  Search,
   Server,
-  Shield,
   TrendingUp,
   Trophy,
-  X,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -41,6 +38,12 @@ type Platform = {
 };
 
 const PLATFORMS: Platform[] = [
+  {
+    id: "none",
+    label: "Not connecting yet",
+    description: "Platform integrations are coming later.",
+    icon: Clock,
+  },
   {
     id: "tradovate",
     label: "Tradovate",
@@ -94,6 +97,12 @@ type Broker = {
 };
 
 const BROKERS: Broker[] = [
+  {
+    id: "none",
+    label: "Not using a broker yet",
+    markets: "Broker integrations are coming later.",
+    icon: Clock,
+  },
   {
     id: "amp",
     label: "AMP Futures",
@@ -151,13 +160,6 @@ const INTEGRATIONS: Integration[] = [
   { id: "excel-csv", label: "Excel / CSV", icon: FileSpreadsheet },
 ];
 
-const DEFAULT_INTEGRATIONS = new Set([
-  "dropbox",
-  "gdrive",
-  "ninjatrader",
-  "excel-csv",
-]);
-
 const SUMMARY_BASE = [
   { label: "Experience", value: "Advanced" },
   { label: "Trading Profile", value: "Intraday" },
@@ -168,54 +170,19 @@ const SUMMARY_BASE = [
 
 export function PlatformStep() {
   const router = useRouter();
-  const [platform, setPlatform] = useState<string>("tradovate");
-  const [broker, setBroker] = useState<string>("topstepx");
+  const [platform, setPlatform] = useState<string>("none");
+  const [broker, setBroker] = useState<string>("none");
   const [customPlatformName, setCustomPlatformName] = useState("");
   const [customBrokerName, setCustomBrokerName] = useState("");
-  const [integrations, setIntegrations] = useState<Set<string>>(
-    DEFAULT_INTEGRATIONS,
-  );
-  const [customIntegrations, setCustomIntegrations] = useState<
-    { id: string; label: string }[]
-  >([]);
-  const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState("");
 
   const platformIsOther = platform === "other-platform";
   const brokerIsOther = broker === "other-broker";
 
+  // Optional step: continue is always allowed. Only require a name when the
+  // tester has explicitly picked "Other" (otherwise the field is meaningless).
   const valid =
-    platform !== "" &&
-    broker !== "" &&
     (!platformIsOther || customPlatformName.trim() !== "") &&
     (!brokerIsOther || customBrokerName.trim() !== "");
-
-  function toggleIntegration(id: string) {
-    setIntegrations((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function addCustomIntegration() {
-    const label = draft.trim();
-    if (!label) return;
-    const id = `integ-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    setCustomIntegrations((prev) => [...prev, { id, label }]);
-    setIntegrations((prev) => new Set(prev).add(id));
-    setDraft("");
-  }
-
-  function removeCustomIntegration(id: string) {
-    setCustomIntegrations((prev) => prev.filter((c) => c.id !== id));
-    setIntegrations((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }
 
   function handleContinue() {
     console.log("[onboarding] platform", {
@@ -223,8 +190,6 @@ export function PlatformStep() {
       customPlatformName: platformIsOther ? customPlatformName.trim() : null,
       broker,
       customBrokerName: brokerIsOther ? customBrokerName.trim() : null,
-      integrations: Array.from(integrations),
-      customIntegrations,
     });
     router.push("/onboarding/review");
   }
@@ -239,29 +204,28 @@ export function PlatformStep() {
     brokerIsOther && customBrokerName.trim()
       ? customBrokerName.trim()
       : activeBroker?.label;
-  const activeIntegrationCount =
-    Array.from(integrations).filter(
-      (id) =>
-        INTEGRATIONS.some((i) => i.id === id) ||
-        customIntegrations.some((c) => c.id === id),
-    ).length;
 
   return (
     <div className="flex flex-1 flex-col gap-5">
       <div className="flex flex-col gap-2">
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-400">
-          Step 8 of 9
+          Step 8 of 9 · Optional
         </p>
         <h1 className="font-heading text-3xl font-bold tracking-tight text-white sm:text-4xl">
           Platform &amp; Broker
         </h1>
         <p className="text-sm leading-relaxed text-slate-300">
-          Connect the tools you use to trade. We&apos;ll sync your data securely
-          to power your insights.
+          Future integration — optional for the beta. StandFast doesn&apos;t
+          connect to your broker or platform yet, so nothing here links to your
+          account. Tell us what you use if you like, or just continue.
         </p>
       </div>
 
-      <NumberedSection num={1} title="Choose your primary platform">
+      <NumberedSection
+        num={1}
+        title="Your primary platform"
+        tag="optional"
+      >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {PLATFORMS.map((p) => {
             const isSelected = platform === p.id;
@@ -300,34 +264,14 @@ export function PlatformStep() {
             placeholder="e.g. MotiveWave, Quantower, NinjaTrader..."
           />
         )}
-        <div className="flex flex-col items-start justify-between gap-2 pt-1 sm:flex-row sm:items-center">
-          <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
-            <Lock className="size-3" />
-            We use read-only connections. Your credentials are never stored.
-          </p>
-          <button
-            type="button"
-            className="flex items-center gap-1 text-[11px] font-semibold text-cyan-300 hover:text-cyan-200"
-          >
-            Learn more about security
-            <ArrowRight className="size-3" />
-          </button>
-        </div>
+        <p className="flex items-center gap-1.5 pt-1 text-[11px] text-slate-400">
+          <Lock className="size-3" />
+          Nothing connects to your account during the beta — this just records
+          what you trade with.
+        </p>
       </NumberedSection>
 
-      <NumberedSection
-        num={2}
-        title="Connect your broker"
-        headerRight={
-          <button
-            type="button"
-            className="flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-cyan-300"
-          >
-            Don&apos;t see your broker? Search all
-            <Search className="size-3" />
-          </button>
-        }
-      >
+      <NumberedSection num={2} title="Your broker" tag="optional">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {BROKERS.map((b) => {
             const isSelected = broker === b.id;
@@ -363,113 +307,32 @@ export function PlatformStep() {
             placeholder="e.g. Optimus Futures, Tastytrade, eToro..."
           />
         )}
-        <div className="flex flex-col items-start justify-between gap-2 pt-1 sm:flex-row sm:items-center">
-          <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
-            <Shield className="size-3" />
-            We support 100+ brokers and data feeds.
-          </p>
-          <button
-            type="button"
-            className="flex items-center gap-1 text-[11px] font-semibold text-cyan-300 hover:text-cyan-200"
-          >
-            View all supported brokers
-            <ArrowRight className="size-3" />
-          </button>
-        </div>
+        <p className="flex items-center gap-1.5 pt-1 text-[11px] text-slate-400">
+          <Clock className="size-3" />
+          Broker and data-feed integrations are coming after the beta.
+        </p>
       </NumberedSection>
 
       <NumberedSection
         num={3}
         title="Additional integrations"
-        tag="optional"
+        tag="coming later"
       >
+        <p className="text-[11px] leading-relaxed text-slate-400">
+          These integrations aren&apos;t available during the beta — they&apos;re
+          planned for later. Nothing here is connected today.
+        </p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {INTEGRATIONS.map((i) => {
-            const Icon = i.icon;
-            const on = integrations.has(i.id);
-            return (
-              <IntegrationRow
-                key={i.id}
-                icon={Icon}
-                label={i.label}
-                on={on}
-                onToggle={() => toggleIntegration(i.id)}
-              />
-            );
-          })}
-          {customIntegrations.map((i) => (
-            <IntegrationRow
-              key={i.id}
-              icon={Plus}
-              label={i.label}
-              on={integrations.has(i.id)}
-              onToggle={() => toggleIntegration(i.id)}
-              onRemove={() => removeCustomIntegration(i.id)}
-            />
+          {INTEGRATIONS.map((i) => (
+            <IntegrationRow key={i.id} icon={i.icon} label={i.label} />
           ))}
         </div>
-
-        {creating ? (
-          <div className="flex gap-2 rounded-lg border border-cyan-400/30 bg-[#08111f]/80 p-2 duration-200 animate-in fade-in slide-in-from-top-1">
-            <Input
-              autoFocus
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addCustomIntegration();
-                } else if (e.key === "Escape") {
-                  setCreating(false);
-                  setDraft("");
-                }
-              }}
-              placeholder="e.g. MotiveWave, Quantower..."
-              className="h-8 flex-1 border-white/[0.08] bg-[#0c1428]/80 text-xs text-white placeholder:text-slate-500 focus-visible:border-cyan-400 focus-visible:ring-cyan-400/30"
-            />
-            <button
-              type="button"
-              onClick={addCustomIntegration}
-              disabled={!draft.trim()}
-              className={cn(
-                "flex h-8 items-center justify-center rounded-md px-3 text-xs font-semibold text-lime-950",
-                "bg-gradient-to-r from-lime-400 to-lime-500",
-                "shadow-[0_0_15px_-3px_rgba(132,204,22,0.45)]",
-                "transition-all duration-200 ease-out",
-                "hover:-translate-y-0.5 hover:from-lime-300 hover:to-lime-400",
-                "disabled:translate-y-0 disabled:opacity-40 disabled:shadow-none",
-              )}
-            >
-              Add
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setCreating(false);
-                setDraft("");
-              }}
-              className="flex h-8 items-center justify-center rounded-md border border-white/[0.08] bg-[#0c1428]/80 px-2.5 text-xs text-slate-300 transition-colors hover:border-white/[0.15] hover:text-white"
-            >
-              Done
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-cyan-400/30 bg-cyan-400/[0.03] px-3 py-2 text-xs font-semibold text-cyan-300 transition-all duration-200 hover:border-cyan-400/50 hover:bg-cyan-400/[0.08]"
-          >
-            <Plus className="size-3.5" />
-            Add custom integration
-          </button>
-        )}
       </NumberedSection>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1fr]">
         <SummaryPanel
           platformLabel={platformDisplay}
           brokerLabel={brokerDisplay}
-          integrationCount={activeIntegrationCount}
         />
         <ProTipPanel />
       </div>
@@ -522,51 +385,21 @@ function NumberedSection({
 function IntegrationRow({
   icon: Icon,
   label,
-  on,
-  onToggle,
-  onRemove,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  on: boolean;
-  onToggle: () => void;
-  onRemove?: () => void;
 }) {
   return (
-    <div
-      className={cn(
-        "flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 transition-colors",
-        on
-          ? "border-cyan-400/40 bg-cyan-400/[0.05]"
-          : "border-white/[0.08] bg-[#0c1428]/80",
-      )}
-    >
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-[#0c1428]/60 px-3 py-2.5 opacity-70">
       <div className="flex min-w-0 items-center gap-2">
-        <Icon
-          className={cn(
-            "size-5 shrink-0 transition-colors",
-            on
-              ? "text-lime-400 drop-shadow-[0_0_5px_rgba(163,230,53,0.4)]"
-              : "text-lime-400/85",
-          )}
-        />
-        <span className="truncate text-sm font-semibold text-white">
+        <Icon className="size-5 shrink-0 text-slate-500" />
+        <span className="truncate text-sm font-semibold text-slate-300">
           {label}
         </span>
       </div>
-      <div className="flex items-center gap-1.5">
-        {onRemove && (
-          <button
-            type="button"
-            onClick={onRemove}
-            aria-label={`Remove ${label}`}
-            className="flex size-5 items-center justify-center rounded-md text-slate-500 hover:bg-white/[0.06] hover:text-slate-200"
-          >
-            <X className="size-3" />
-          </button>
-        )}
-        <Toggle checked={on} onChange={onToggle} />
-      </div>
+      <span className="shrink-0 rounded-full border border-white/[0.10] bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        Coming later
+      </span>
     </div>
   );
 }
@@ -633,50 +466,17 @@ function LogoIcon({
   );
 }
 
-function Toggle({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200",
-        checked ? "bg-cyan-400" : "bg-white/[0.10]",
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 size-4 rounded-full bg-white transition-all duration-200",
-          checked
-            ? "left-[18px] shadow-[0_0_8px_rgba(34,211,238,0.55)]"
-            : "left-0.5",
-        )}
-      />
-    </button>
-  );
-}
-
 function SummaryPanel({
   platformLabel,
   brokerLabel,
-  integrationCount,
 }: {
   platformLabel?: string;
   brokerLabel?: string;
-  integrationCount: number;
 }) {
   const rows = [
     ...SUMMARY_BASE,
     { label: "Platform", value: platformLabel ?? "—" },
     { label: "Broker", value: brokerLabel ?? "—" },
-    { label: "Integrations", value: `${integrationCount} active` },
   ];
 
   return (
@@ -720,11 +520,12 @@ function ProTipPanel() {
         <h3 className="text-sm font-semibold text-white">Pro Tip</h3>
       </div>
       <p className="text-[11px] leading-relaxed text-slate-300">
-        Connecting your platform and broker unlocks automatic trade logging,
-        deeper analytics, and real-time behavioral insights.
+        When broker integrations launch after the beta, connecting will unlock
+        automatic trade logging and deeper analytics. For the beta, you&apos;ll
+        log trades manually — no connection required.
       </p>
       <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
-        You can always add or change connections later.
+        You can add connections later when they&apos;re available.
       </p>
     </section>
   );

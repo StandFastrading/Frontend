@@ -4,17 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity,
-  ArrowRight,
   BarChart3,
   Building2,
+  Clock,
   Layers,
   LineChart,
   Lock,
   Mountain,
   Plus,
-  Search,
   Server,
-  Shield,
   TrendingUp,
   Trophy,
 } from "lucide-react";
@@ -34,6 +32,12 @@ type Platform = {
 };
 
 const PLATFORMS: Platform[] = [
+  {
+    id: "none",
+    label: "Not connecting yet",
+    description: "Platform integrations are coming later.",
+    icon: Clock,
+  },
   {
     id: "tradovate",
     label: "Tradovate",
@@ -95,6 +99,12 @@ type Broker = {
 
 const BROKERS: Broker[] = [
   {
+    id: "none",
+    label: "Not using a broker yet",
+    markets: "Broker integrations are coming later.",
+    icon: Clock,
+  },
+  {
     id: "amp",
     label: "AMP Futures",
     markets: "Futures broker",
@@ -153,17 +163,17 @@ const BROKERS: Broker[] = [
 
 export function FuturesPlatformStep() {
   const router = useRouter();
-  const [platform, setPlatform] = useState<string>("tradovate");
-  const [broker, setBroker] = useState<string>("amp");
+  const [platform, setPlatform] = useState<string>("none");
+  const [broker, setBroker] = useState<string>("none");
   const [customPlatformName, setCustomPlatformName] = useState("");
   const [customBrokerName, setCustomBrokerName] = useState("");
 
   const platformIsOther = platform === "other-platform";
   const brokerIsOther = broker === "other-broker";
 
+  // Optional step: continue is always allowed. Only require a name when the
+  // tester has explicitly picked "Other" (otherwise the field is meaningless).
   const valid =
-    platform !== "" &&
-    broker !== "" &&
     (!platformIsOther || customPlatformName.trim() !== "") &&
     (!brokerIsOther || customBrokerName.trim() !== "");
 
@@ -181,18 +191,19 @@ export function FuturesPlatformStep() {
     <div className="flex flex-1 flex-col gap-5">
       <div className="flex flex-col gap-2">
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-400">
-          Step 7 of 7
+          Step 7 of 7 · Optional
         </p>
         <h1 className="font-heading text-3xl font-bold tracking-tight text-white sm:text-4xl">
           Platform &amp; Broker
         </h1>
         <p className="text-sm leading-relaxed text-slate-300">
-          Connect the tools you use to trade futures. We&apos;ll sync your data
-          securely to power your insights.
+          Future integration — optional for the beta. StandFast doesn&apos;t
+          connect to your broker or platform yet, so nothing here links to your
+          account. Tell us what you use if you like, or just continue.
         </p>
       </div>
 
-      <NumberedSection num={1} title="Choose your primary platform">
+      <NumberedSection num={1} title="Your primary platform (optional)">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {PLATFORMS.map((p) => {
             const isSelected = platform === p.id;
@@ -233,34 +244,14 @@ export function FuturesPlatformStep() {
           />
         )}
 
-        <div className="flex flex-col items-start justify-between gap-2 pt-1 sm:flex-row sm:items-center">
-          <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
-            <Lock className="size-3" />
-            We use read-only connections. Your credentials are never stored.
-          </p>
-          <button
-            type="button"
-            className="flex items-center gap-1 text-[11px] font-semibold text-cyan-300 hover:text-cyan-200"
-          >
-            Learn more about security
-            <ArrowRight className="size-3" />
-          </button>
-        </div>
+        <p className="flex items-center gap-1.5 pt-1 text-[11px] text-slate-400">
+          <Lock className="size-3" />
+          Nothing connects to your account during the beta — this just records
+          what you trade with.
+        </p>
       </NumberedSection>
 
-      <NumberedSection
-        num={2}
-        title="Connect your broker"
-        headerRight={
-          <button
-            type="button"
-            className="flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-cyan-300"
-          >
-            Don&apos;t see your broker? Search all
-            <Search className="size-3" />
-          </button>
-        }
-      >
+      <NumberedSection num={2} title="Your broker (optional)">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {BROKERS.map((b) => {
             const isSelected = broker === b.id;
@@ -298,19 +289,10 @@ export function FuturesPlatformStep() {
           />
         )}
 
-        <div className="flex flex-col items-start justify-between gap-2 pt-1 sm:flex-row sm:items-center">
-          <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
-            <Shield className="size-3" />
-            We support 100+ brokers and futures data feeds.
-          </p>
-          <button
-            type="button"
-            className="flex items-center gap-1 text-[11px] font-semibold text-cyan-300 hover:text-cyan-200"
-          >
-            View all supported brokers
-            <ArrowRight className="size-3" />
-          </button>
-        </div>
+        <p className="flex items-center gap-1.5 pt-1 text-[11px] text-slate-400">
+          <Clock className="size-3" />
+          Broker and futures data-feed integrations are coming after the beta.
+        </p>
       </NumberedSection>
 
       <StepFooter

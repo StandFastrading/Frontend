@@ -24,7 +24,9 @@ import {
   Undo2,
 } from "lucide-react";
 
+import { SETUP_LIBRARY } from "@/features/onboarding/setups-data";
 import { cn } from "@/lib/utils";
+import { useAppStore } from "@/store";
 import { Callout } from "./callout";
 import { PickCard } from "./pick-card";
 import { SetupLibrary, type CustomSetup } from "./setup-library";
@@ -120,6 +122,8 @@ const OTHER_SETUPS: Setup[] = [
 
 export function SetupsStep() {
   const router = useRouter();
+  const riskRules = useAppStore((s) => s.riskRules);
+  const saveRiskRules = useAppStore((s) => s.saveRiskRules);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [moreOpen, setMoreOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -143,10 +147,28 @@ export function SetupsStep() {
   }
 
   function handleContinue() {
-    console.log("[onboarding] setups", {
-      selected: Array.from(selected),
-      customSetups,
-    });
+    // Resolve selected setup IDs to their human-readable labels and merge
+    // into riskRules.allowedSetups — that array is what the Trade Desk
+    // validation engine matches against. Merge (not replace) so traders who
+    // walk multiple asset-class onboardings (Stocks + Futures + Forex +
+    // Crypto) end up with the union, not whichever was completed last.
+    const idToLabel = new Map<string, string>();
+    for (const s of [...PRICE_ACTION, ...CHART_PATTERNS, ...OTHER_SETUPS]) {
+      idToLabel.set(s.id, s.label);
+    }
+    for (const cat of SETUP_LIBRARY) {
+      for (const s of cat.setups) idToLabel.set(s.id, s.label);
+    }
+    for (const s of customSetups) idToLabel.set(s.id, s.label);
+
+    const selectedLabels = Array.from(selected)
+      .map((id) => idToLabel.get(id))
+      .filter((label): label is string => Boolean(label));
+    const allowedSetups = Array.from(
+      new Set([...riskRules.allowedSetups, ...selectedLabels]),
+    );
+
+    saveRiskRules({ ...riskRules, allowedSetups });
     router.push("/onboarding/behavioral");
   }
 

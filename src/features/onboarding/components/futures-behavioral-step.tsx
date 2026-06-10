@@ -33,6 +33,9 @@ import { cn } from "@/lib/utils";
 import { Callout } from "./callout";
 import { StepFooter } from "./step-footer";
 
+import { useAppStore } from "@/store";
+import { buildBehavioralBaseline } from "@/features/onboarding/lib/onboarding-persistence";
+
 type Behavior = {
   id: string;
   label: string;
@@ -71,6 +74,7 @@ type CustomBehavior = { id: string; label: string };
 
 export function FuturesBehavioralStep() {
   const router = useRouter();
+  const patchUserProfile = useAppStore((s) => s.patchUserProfile);
   const [behaviors, setBehaviors] = useState<Set<string>>(new Set());
   const [triggers, setTriggers] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState("");
@@ -105,11 +109,13 @@ export function FuturesBehavioralStep() {
   }
 
   function handleContinue() {
-    console.log("[onboarding] futures.behavioral", {
-      behaviors: Array.from(behaviors),
-      triggers: Array.from(triggers),
-      customBehaviors,
-      notes,
+    patchUserProfile({
+      behavioralBaseline: buildBehavioralBaseline({
+        behaviors: Array.from(behaviors),
+        triggers: Array.from(triggers),
+        customBehaviors,
+        notes,
+      }),
     });
     router.push("/onboarding/futures/risk");
   }

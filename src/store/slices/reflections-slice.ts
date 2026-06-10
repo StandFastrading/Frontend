@@ -1,3 +1,9 @@
+import {
+  dailyReflectionMapper,
+  enqueueSync,
+  sessionNoteMapper,
+  tradeReflectionMapper,
+} from "@/lib/sync";
 import type {
   DailyReflection,
   NoteDraft,
@@ -7,6 +13,13 @@ import type {
   TradeReflection,
 } from "@/types";
 import type { SliceCreator } from "@/store/types";
+
+// Server sync notes:
+// - Finalized daily reflections, finalized trade reflections, and session
+//   notes ARE persisted server-side.
+// - reflection drafts + the notes-tab in-progress draft are LOCAL ONLY per
+//   the v1 product decision (chatty auto-save + drafts are transient).
+//   Cross-device draft sync is a v2 feature.
 
 // =============================================================================
 // Reflections + Session Notes slice
@@ -106,6 +119,7 @@ export type ReflectionsSlice = {
 
 export const createReflectionsSlice: SliceCreator<ReflectionsSlice> = (
   set,
+  get,
 ) => ({
   reflections: [],
   sessionNotes: [],
@@ -113,7 +127,7 @@ export const createReflectionsSlice: SliceCreator<ReflectionsSlice> = (
   reflectionDrafts: {},
   noteDraft: null,
 
-  saveReflection: (reflection) =>
+  saveReflection: (reflection) => {
     set((state) => ({
       reflections: [
         reflection,
@@ -121,24 +135,58 @@ export const createReflectionsSlice: SliceCreator<ReflectionsSlice> = (
           (r) => r.tradingDate !== reflection.tradingDate,
         ),
       ],
-    })),
+    }));
+    const userId = get().userId;
+    if (userId) {
+      enqueueSync({
+        table: "daily_reflections",
+        op: "upsert",
+        payload: dailyReflectionMapper.toUpsert(reflection, userId),
+        onConflict: "user_id,trading_date",
+      });
+    }
+  },
 
-  deleteReflection: (id) =>
+  deleteReflection: (id) => {
+    const target = get().reflections.find((r) => r.id === id);
     set((state) => ({
       reflections: state.reflections.filter((r) => r.id !== id),
-    })),
+    }));
+    const userId = get().userId;
+    if (userId && target) {
+      enqueueSync({
+        table: "daily_reflections",
+        op: "delete",
+        payload: {},
+        match: { user_id: userId, trading_date: target.tradingDate },
+      });
+    }
+  },
 
-  appendSessionNote: (note) =>
+  appendSessionNote: (note) => {
     set((state) => ({
       sessionNotes: [note, ...state.sessionNotes],
-    })),
+    }));
+    const userId = get().userId;
+    if (userId) {
+      enqueueSync({
+        table: "session_notes",
+        op: "insert",
+        payload: sessionNoteMapper.toInsert(note, userId),
+      });
+    }
+  },
 
-  deleteSessionNote: (id) =>
+  deleteSessionNote: (id) => {
     set((state) => ({
       sessionNotes: state.sessionNotes.filter((n) => n.id !== id),
-    })),
+    }));
+    // session_notes is append-only at the RLS layer — deletes are local only.
+    // To remove server-side records, a future "delete journal entry" RPC
+    // would relax the policy. Surface this gap if traders ask for it.
+  },
 
-  saveTradeReflection: (reflection) =>
+  saveTradeReflection: (reflection) => {
     set((state) => ({
       tradeReflections: [
         reflection,
@@ -146,12 +194,33 @@ export const createReflectionsSlice: SliceCreator<ReflectionsSlice> = (
           (r) => r.tradeId !== reflection.tradeId,
         ),
       ],
-    })),
+    }));
+    const userId = get().userId;
+    if (userId) {
+      enqueueSync({
+        table: "trade_reflections",
+        op: "upsert",
+        payload: tradeReflectionMapper.toUpsert(reflection, userId),
+        onConflict: "user_id,trade_id",
+      });
+    }
+  },
 
-  deleteTradeReflection: (id) =>
+  deleteTradeReflection: (id) => {
+    const target = get().tradeReflections.find((r) => r.id === id);
     set((state) => ({
       tradeReflections: state.tradeReflections.filter((r) => r.id !== id),
-    })),
+    }));
+    const userId = get().userId;
+    if (userId && target) {
+      enqueueSync({
+        table: "trade_reflections",
+        op: "delete",
+        payload: {},
+        match: { user_id: userId, trade_id: target.tradeId },
+      });
+    }
+  },
 
   updateReflectionDraft: (sessionId, patch) =>
     set((state) => {
@@ -233,7 +302,7 @@ export const createReflectionsSlice: SliceCreator<ReflectionsSlice> = (
   // failed finalize doesn't lose work; for the local-only persistence
   // this is essentially synchronous, but the contract is set so a future
   // backend-write path can keep the same guarantee.
-  finalizeReflection: (reflection) =>
+  finalizeReflection: (reflection) => {
     set((state) => {
       const draftKey = reflection.sessionId;
       const rest =
@@ -253,7 +322,17 @@ export const createReflectionsSlice: SliceCreator<ReflectionsSlice> = (
         ],
         reflectionDrafts: rest,
       };
-    }),
+    });
+    const userId = get().userId;
+    if (userId) {
+      enqueueSync({
+        table: "daily_reflections",
+        op: "upsert",
+        payload: dailyReflectionMapper.toUpsert(reflection, userId),
+        onConflict: "user_id,trading_date",
+      });
+    }
+  },
 
   setNoteDraft: (draft) => set(() => ({ noteDraft: draft })),
   clearNoteDraft: () => set(() => ({ noteDraft: null })),

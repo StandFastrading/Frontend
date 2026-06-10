@@ -16,6 +16,8 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAppStore } from "@/store";
+import type { MarketType } from "@/types/risk";
 
 const MARKETS = [
   {
@@ -52,12 +54,27 @@ const MARKETS = [
 
 type MarketId = (typeof MARKETS)[number]["id"];
 
+// Map the lowercase option ids to the capitalized MarketType the profile
+// schema and the profiles.selected_markets DB check constraint require.
+const MARKET_ID_TO_TYPE: Record<MarketId, MarketType> = {
+  stocks: "Stocks",
+  futures: "Futures",
+  options: "Options",
+  forex: "Forex",
+  crypto: "Crypto",
+};
+
 export function MarketStep() {
   const router = useRouter();
+  const patchUserProfile = useAppStore((s) => s.patchUserProfile);
   const [selected, setSelected] = useState<MarketId | null>(null);
 
   function handleContinue() {
-    console.log("[onboarding] market", { selected });
+    if (!selected) return;
+    // Persist the chosen market to the profile so it syncs to
+    // profiles.selected_markets (the binder set userId for this onboarding
+    // session, so this write enqueues and syncs).
+    patchUserProfile({ selectedMarkets: [MARKET_ID_TO_TYPE[selected]] });
     if (selected === "options") {
       router.push("/onboarding/options/experience");
     } else if (selected === "futures") {
@@ -74,7 +91,7 @@ export function MarketStep() {
   return (
     <div className="flex w-full max-w-lg flex-col items-center gap-10">
       <Image
-        src="/standfast-logo.svg"
+        src="/logo/standfast-logo.svg"
         alt="StandFast Technologies"
         width={280}
         height={80}

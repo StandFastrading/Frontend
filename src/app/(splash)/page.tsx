@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { StandfastLogo } from "@/components/ui/StandfastLogo";
+import { ROUTES } from "@/config/routes";
 
 export const metadata: Metadata = {
   title: "StandFast Technologies — Coming Soon",
@@ -51,9 +53,8 @@ export default function ComingSoonPage() {
           Platform currently under development.
         </p>
 
-        <button
-          type="button"
-          aria-disabled
+        <Link
+          href={ROUTES.auth}
           className="group relative mt-14 inline-flex items-center justify-center overflow-hidden rounded-full border border-emerald-400/50 bg-emerald-500/[0.08] px-9 py-3.5 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300 shadow-[0_0_30px_-6px_rgba(16,185,129,0.55),inset_0_0_24px_-12px_rgba(16,185,129,0.7)] transition-colors duration-300 hover:bg-emerald-500/[0.14] hover:text-emerald-200 sm:text-sm"
         >
           <span
@@ -64,8 +65,8 @@ export default function ComingSoonPage() {
             aria-hidden
             className="pointer-events-none absolute inset-y-0 -left-1/2 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-emerald-200/15 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-[300%]"
           />
-          Coming Soon
-        </button>
+          Beta Test Entry
+        </Link>
       </section>
 
       <footer className="relative z-10 mt-20 text-[0.65rem] uppercase tracking-[0.4em] text-white/30">

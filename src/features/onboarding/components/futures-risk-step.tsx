@@ -20,6 +20,10 @@ import { cn } from "@/lib/utils";
 import { Callout } from "./callout";
 import { StepFooter } from "./step-footer";
 
+import { useAppStore } from "@/store";
+import { applyOnboardingRisk } from "@/features/onboarding/lib/onboarding-persistence";
+import { AccountSizeField, useAccountSizeField } from "./account-size-field";
+
 type Rule = {
   id: string;
   label: string;
@@ -74,6 +78,8 @@ const DEFAULT_RULES = new Set([
 
 export function FuturesRiskStep() {
   const router = useRouter();
+  const saveRiskRules = useAppStore((s) => s.saveRiskRules);
+  const account = useAccountSizeField();
 
   const [riskPerTrade, setRiskPerTrade] = useState(1.0);
   const [dailyLoss, setDailyLoss] = useState(3.0);
@@ -94,16 +100,24 @@ export function FuturesRiskStep() {
   }
 
   function handleContinue() {
-    console.log("[onboarding] futures.risk", {
-      riskPerTrade,
-      dailyLoss,
-      maxContracts,
-      maxOpenPositions,
-      maxSameDirection,
-      maxReentries,
-      weeklyDrawdown,
-      rules: Array.from(rules),
-    });
+    saveRiskRules(
+      applyOnboardingRisk(useAppStore.getState().riskRules, {
+        accountSize: account.accountSize,
+        accountType: "Futures",
+        riskPerTradePercent: riskPerTrade,
+        dailyLossPercent: dailyLoss,
+        maxPositionSize: maxContracts,
+        maxOpenPositions,
+        marketConfig: {
+          marketType: "Futures",
+          instrumentUnit: "contracts",
+          maxSameDirection,
+          maxReentries,
+          weeklyDrawdownPercent: weeklyDrawdown,
+          selectedRuleIds: Array.from(rules),
+        },
+      }),
+    );
     router.push("/onboarding/futures/platform");
   }
 
@@ -120,6 +134,13 @@ export function FuturesRiskStep() {
           Define the boundaries that protect your capital.
         </p>
       </div>
+
+      <AccountSizeField
+        label="Account Size"
+        text={account.text}
+        onChange={account.setText}
+        onBlur={account.reformat}
+      />
 
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
         <MetricCard
@@ -342,7 +363,11 @@ export function FuturesRiskStep() {
         text="These rules don't restrict you. They free you to trade what you trained for."
       />
 
-      <StepFooter currentNum={6} onContinue={handleContinue} />
+      <StepFooter
+        currentNum={6}
+        onContinue={handleContinue}
+        continueDisabled={account.accountSize <= 0}
+      />
     </div>
   );
 }

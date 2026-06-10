@@ -23,12 +23,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SyncStatusChip } from "@/components/layout/sync-status-chip";
 import { dashboardNav } from "@/config/nav";
 import { ROUTES } from "@/config/routes";
-import {
-  clearAllMockData,
-  clearMockSession,
-} from "@/features/auth/mock-session";
+import { signOut } from "@/features/auth/api";
+import { clearLocalCache } from "@/lib/auth/clear-local-cache";
 import { factoryResetTestData } from "@/lib/storage";
 import { resetAppState, useAppStore } from "@/store";
 import { cn } from "@/lib/utils";
@@ -45,11 +44,19 @@ export function Sidebar({ email }: { email: string }) {
   const resetTodaysSession = useAppStore((s) => s.resetTodaysSession);
   const [factoryResetOpen, setFactoryResetOpen] = useState(false);
 
-  // Sign-out: clears the mock session cookie only. Onboarded flag is kept so
-  // returning users go straight to /dashboard after their next sign-in. When
-  // real Supabase auth lands, call supabase.auth.signOut() here too.
-  const handleSignOut = () => {
-    clearMockSession();
+  // Sign-out: end the Supabase session AND wipe local cache. Wiping the cache
+  // is what prevents user A's trades/journal from being visible to user B on
+  // the same browser. `clearLocalCache` sweeps every sf_* localStorage key
+  // and resets the in-memory zustand store.
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch {
+      // Even if Supabase signOut fails (e.g. flaky network), still clear the
+      // local cache — the safety property is more important than a tidy
+      // server-side log-out.
+    }
+    clearLocalCache();
     toast.success("Signed out");
     router.replace(ROUTES.auth);
     router.refresh();
@@ -73,30 +80,37 @@ export function Sidebar({ email }: { email: string }) {
     router.refresh();
   };
 
-  // Dev-only: full demo wipe. Confirms first because it's destructive
-  // (deletes saved Rules & Risk settings + decision log).
-  const handleResetDemo = () => {
+  // Dev-only: heavier "reset everything local" affordance. Equivalent to a
+  // sign-out: ends the Supabase session and wipes every sf_* localStorage
+  // key. Server-side rows in Supabase are untouched — to delete those, use
+  // a future "Delete my account" action that drops the auth user (RLS
+  // cascades clean up the rest).
+  const handleResetDemo = async () => {
     if (
       typeof window !== "undefined" &&
       !window.confirm(
-        "Reset all demo data?\n\nThis clears your session, onboarding state, saved Rules & Risk settings, and decision log. You'll be sent back to /auth as a brand-new user.",
+        "Reset local data?\n\nThis signs you out and wipes every local cache key on this browser. Your server-side data on Supabase is preserved.",
       )
     ) {
       return;
     }
-    clearAllMockData();
-    toast.success("Demo data cleared");
+    try {
+      await signOut();
+    } catch {
+      /* still clear cache below */
+    }
+    clearLocalCache();
+    toast.success("Local cache cleared");
     router.replace(ROUTES.auth);
     router.refresh();
   };
 
-  // Dev-only: factory reset for test data. Unlike Reset Demo Data, this
-  // preserves the mock-auth + mock-onboarded cookies — so the trader
-  // stays signed in and lands on /dashboard rather than getting bounced
-  // through onboarding again. Sweeps every localStorage key under the
-  // `sf_` prefix (broader than the enumerated ALL_SF_STORAGE_KEYS), then
-  // resets the in-memory zustand state so the dashboard re-renders
-  // empty without waiting for a full page reload.
+  // Dev-only: factory reset for test data. Unlike Reset Local Data, this
+  // does NOT sign the user out — the Supabase session stays active so the
+  // trader lands back on /dashboard with an empty local cache. Sweeps every
+  // localStorage key under the `sf_` prefix and resets the in-memory zustand
+  // state so the dashboard re-renders empty without waiting for a full page
+  // reload.
   const handleFactoryReset = () => {
     const removed = factoryResetTestData();
     // Reset the in-memory store too — `factoryResetTestData` only
@@ -172,6 +186,11 @@ export function Sidebar({ email }: { email: string }) {
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Sync status — ambient indicator of pending/errored server writes.
+          Only visible when there's something to communicate; silent during
+          normal "all synced" steady state. */}
+      <SyncStatusChip />
 
       {/* Trade Desk affordance — kept accessible at the bottom of the rail
           but visually quieted so behavior-awareness surfaces (the dashboard)

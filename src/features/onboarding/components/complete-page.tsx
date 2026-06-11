@@ -8,6 +8,7 @@ import { ROUTES } from "@/config/routes";
 import { DisciplineEngineSequence } from "@/features/onboarding/components/discipline-engine-sequence";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { flushSyncQueueAsync } from "@/lib/sync";
+import { useAppStore } from "@/store";
 
 // Onboarding completion experience. The cinematic Discipline Engine
 // sequence IS the page — it dominates the viewport while the system
@@ -24,6 +25,7 @@ export function CompletePage() {
   const router = useRouter();
   const [systemOnline, setSystemOnline] = useState(false);
   const [entering, setEntering] = useState(false);
+  const completeOnboarding = useAppStore((s) => s.completeOnboarding);
 
   const handleEnterDashboard = useCallback(async () => {
     if (entering) return;
@@ -37,6 +39,12 @@ export function CompletePage() {
         router.replace(ROUTES.auth);
         return;
       }
+
+      // 0. Mark the store complete FIRST. Otherwise the local→server migration
+      // (and any other profile upsert) replays a profiles row built from the
+      // stale store with onboarding_complete=false, clobbering the true value
+      // we set below and bouncing the user back to /onboarding.
+      completeOnboarding();
 
       // 1. Drain all pending onboarding writes (account size, setups, profile,
       // etc.) FIRST. These carry the store's onboarding_complete=false; flushing
@@ -78,7 +86,7 @@ export function CompletePage() {
       setEntering(false);
       toast.error((err as Error).message || "Could not complete onboarding");
     }
-  }, [entering, router]);
+  }, [entering, router, completeOnboarding]);
 
   // Stable callback so the sequence's reveal effect (whose deps include
   // this prop) doesn't tear down + re-attach on every CompletePage render.

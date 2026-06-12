@@ -79,9 +79,12 @@ export function CompletePage() {
       const { error: refreshError } = await supabase.auth.refreshSession();
       if (refreshError) throw refreshError;
 
-      // 4. Navigate to the dashboard.
-      router.push(ROUTES.dashboard);
-      router.refresh();
+      // 4. Navigate to the dashboard with a full document load (not a client
+      // router push). A hard navigation guarantees the request carries the
+      // freshly-refreshed auth cookie, so the middleware reliably sees
+      // onboarding_complete instead of racing the cookie write and bouncing
+      // back to /onboarding.
+      window.location.assign(ROUTES.dashboard);
     } catch (err) {
       setEntering(false);
       toast.error((err as Error).message || "Could not complete onboarding");
